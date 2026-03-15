@@ -61,21 +61,17 @@ function playBang() {
 function playUhhh(isDeer) {
   if (!audioCtx) return;
   const ac = audioCtx, t = ac.currentTime;
-  // Deer: lower, slower, gruntier. Rabbit: high strangled squeak.
-  const freq = isDeer ? (90 + Math.random()*70) : (220 + Math.random()*160);
-  const dur  = isDeer ? 0.75 : 0.5;
+  // Soft, short, inoffensive little squeak/grunt
+  const freq = isDeer ? (120 + Math.random()*60) : (300 + Math.random()*120);
+  const dur  = isDeer ? 0.28 : 0.18;
   const o=ac.createOscillator(), g=ac.createGain();
-  const lfo=ac.createOscillator(), lg=ac.createGain();
-  o.type='sawtooth';
+  o.type='sine';  // sine is much softer than sawtooth
   o.frequency.setValueAtTime(freq, t);
-  o.frequency.exponentialRampToValueAtTime(isDeer ? 28 : 55, t+dur);
-  lfo.frequency.value = isDeer ? 7 : 18;
-  lg.gain.value = isDeer ? 12 : 28;
-  lfo.connect(lg); lg.connect(o.frequency);
-  g.gain.setValueAtTime(isDeer ? 0.25 : 0.38, t);
+  o.frequency.exponentialRampToValueAtTime(freq * 0.6, t+dur);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(isDeer ? 0.08 : 0.1, t+0.02);
   g.gain.exponentialRampToValueAtTime(0.001, t+dur);
   o.connect(g); g.connect(ac.destination);
-  lfo.start(t); lfo.stop(t+dur);
   o.start(t); o.stop(t+dur);
 }
 function playVictory() {
@@ -685,7 +681,7 @@ function render(ts){
 
   if(phase==='title')
     drawCard('🌸 Garden Defender 🌸','#a02808',
-      ['Rabbits are invading! Help Debbie protect her flowers!',
+      ['Rabbits are invading! Help Debbie protect her flowers, by shooting the rabbits.',
        '🔫  Tap anywhere to move Debbie & shoot',
        '🐰  Defeat '+WIN+' rabbits to unlock Level 2!',
        '🌸  Don\'t let them eat your flowers!'],
@@ -694,33 +690,41 @@ function render(ts){
     drawCard('🦌  Level 2!  🦌','#6a1a9a',
       ['What have you done? You\'ve killed the waaaaabits...',
        'And now the deer have arrived!',
-       '🦌  Red, Roe & Fallow — all hungry, all coming for you.',
        ''],
-      '🔫  Bring It On!');
+      );
   else if(phase==='win')
     drawCard('🎉  Garden Saved!  🎉','#1a7a10',
       ['Debbie defeated the rabbits AND the deer! 🦌🐰',
-       'The flowers are safe. What a hero! 🌷🌺🌸',
-       'Garden security: MAXIMUM.',''],
+       'The flowers are safe. 🌷🌺🌸',''],
       '🌸  Play Again  🌸');
   else if(phase==='lose')
     drawCard('🐰  Oh no…  🐰','#aa1808',
       ['The garden invaders ate all your flowers!',
        'You got '+kills+' of them in Level '+level+' though…',
-       'Debbie needs a quicker trigger finger!',''],
+       'Better luck next time!',''],
       '🔫  Try Again!');
   ctx.restore();
   requestAnimationFrame(render);
 }
 
 // ── INPUT ────────────────────────────────────────────────────────
+// Button rect in drawCard: cw=550,ch=400,cx=(VW-cw)/2,cy=(VH-ch)/2
+// bw=270,bh=52, bx=(VW-bw)/2, by=cy+ch-72
+const CARD_CY = (VH-400)/2;
+const BTN_X = (VW-270)/2, BTN_Y = CARD_CY+400-72, BTN_W = 270, BTN_H = 52;
+
+function onButton(gx,gy){
+  return gx>=BTN_X && gx<=BTN_X+BTN_W && gy>=BTN_Y && gy<=BTN_Y+BTN_H;
+}
+
 function handleInput(cx,cy){
   ensureAudio();
   const rect=canvas.getBoundingClientRect();
   const gx=(cx-rect.left)/scale;
-  if(phase==='title')  { resetGame(); phase='playing'; startMusic(); return; }
-  if(phase==='levelup'){ startLevel2(); return; }
-  if(phase==='win'||phase==='lose'){ resetGame(); phase='playing'; startMusic(); return; }
+  const gy=(cy-rect.top)/scale;
+  if(phase==='title')  { if(onButton(gx,gy)){ resetGame(); phase='playing'; startMusic(); } return; }
+  if(phase==='levelup'){ if(onButton(gx,gy)) startLevel2(); return; }
+  if(phase==='win'||phase==='lose'){ if(onButton(gx,gy)){ resetGame(); phase='playing'; startMusic(); } return; }
   // Playing: every tap moves AND shoots
   targetX=Math.max(42,Math.min(VW-42,gx));
   if(shootCooldown<=0){
