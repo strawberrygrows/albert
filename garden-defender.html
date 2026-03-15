@@ -23,15 +23,19 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
 const VW = 900, VH = 620;
-let scale = 1;
+let scale = 1, cssScale = 1;
 
 function resize() {
-  scale = Math.min(window.innerWidth / VW, window.innerHeight / VH);
+  const dpr = window.devicePixelRatio || 1;
+  cssScale = Math.min(window.innerWidth / VW, window.innerHeight / VH);
+  scale = cssScale * dpr;
   canvas.width  = Math.round(VW * scale);
   canvas.height = Math.round(VH * scale);
+  canvas.style.width  = Math.round(VW * cssScale) + 'px';
+  canvas.style.height = Math.round(VH * cssScale) + 'px';
   canvas.style.position = 'fixed';
-  canvas.style.left = ((window.innerWidth  - canvas.width)  / 2) + 'px';
-  canvas.style.top  = ((window.innerHeight - canvas.height) / 2) + 'px';
+  canvas.style.left = ((window.innerWidth  - Math.round(VW * cssScale)) / 2) + 'px';
+  canvas.style.top  = ((window.innerHeight - Math.round(VH * cssScale)) / 2) + 'px';
 }
 resize();
 window.addEventListener('resize', resize);
@@ -507,42 +511,71 @@ function drawEntity(r){
   if(r.isDeer) drawDeer(r); else drawRabbit(r);
 }
 
-// ── DEBBIE ───────────────────────────────────────────────────────
+// ── DEBBIE (seen from behind) ─────────────────────────────────────
 function drawDebbie(){
   const x=debbieX, y=DEBBIE_Y;
   ctx.save();ctx.translate(x,y);
+
+  // Shadow
   ctx.fillStyle='rgba(0,0,0,0.11)';ctx.beginPath();ctx.ellipse(2,40,22,6,0,0,Math.PI*2);ctx.fill();
+
+  // Boots
   ctx.fillStyle='#382610';ctx.strokeStyle='#281808';ctx.lineWidth=1;
   ctx.beginPath();ctx.ellipse(-10,41,11,5.5,0,0,Math.PI*2);ctx.fill();ctx.stroke();
   ctx.beginPath();ctx.ellipse(10,41,11,5.5,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.fillStyle='#483820';ctx.beginPath();ctx.ellipse(-8,39,8,4,0,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.ellipse(12,39,8,4,0,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='#483820';
+  ctx.beginPath();ctx.ellipse(-10,38,8,4,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(10,38,8,4,0,0,Math.PI*2);ctx.fill();
+
+  // Legs (jeans)
   ctx.strokeStyle='#4860cc';ctx.lineWidth=8;ctx.lineCap='round';
   ctx.beginPath();ctx.moveTo(-8,15);ctx.lineTo(-10,40);ctx.stroke();
   ctx.beginPath();ctx.moveTo(8,15);ctx.lineTo(10,40);ctx.stroke();
+  // Jean highlight
+  ctx.strokeStyle='rgba(120,150,255,0.2)';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(-7,15);ctx.lineTo(-9,38);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(9,15);ctx.lineTo(11,38);ctx.stroke();
+
+  // Body (green jumper, back view)
   ctx.fillStyle='#5ab840';ctx.strokeStyle='#389820';ctx.lineWidth=1.5;
   ctx.beginPath();rr(-17,-16,34,33,6);ctx.fill();ctx.stroke();
+  // Knit texture lines on back
   ctx.strokeStyle='rgba(38,100,18,.28)';ctx.lineWidth=1;
   for(let jy=-10;jy<=14;jy+=6){ctx.beginPath();ctx.moveTo(-14,jy);ctx.lineTo(14,jy);ctx.stroke();}
-  ctx.strokeStyle='#f0a870';ctx.lineWidth=8;ctx.lineCap='round';
-  ctx.beginPath();ctx.moveTo(-17,-5);ctx.lineTo(-26,18);ctx.stroke();
-  ctx.fillStyle='#f0a870';ctx.beginPath();ctx.ellipse(-27,20,6,4,-.3,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.moveTo(17,-5);ctx.lineTo(26,-22);ctx.stroke();
-  ctx.save();ctx.translate(27,-23);
+
+  // Left arm (hanging down at side)
+  ctx.strokeStyle='#5ab840';ctx.lineWidth=9;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(-17,-4);ctx.lineTo(-22,15);ctx.stroke();
+  // Left sleeve end / hand just visible
+  ctx.fillStyle='#f0a870';ctx.beginPath();ctx.ellipse(-23,17,5,4,0.2,0,Math.PI*2);ctx.fill();
+
+  // Right arm raised, holding gun up
+  ctx.strokeStyle='#5ab840';ctx.lineWidth=9;
+  ctx.beginPath();ctx.moveTo(17,-4);ctx.lineTo(23,-18);ctx.stroke();
+
+  // ── GUN (pointing straight up, seen from behind) ──
+  ctx.save();ctx.translate(24,-20);
+  // Stock (wooden)
   ctx.strokeStyle='#6a3c18';ctx.lineWidth=7;ctx.lineCap='round';
-  ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-44);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-42);ctx.stroke();
+  // Wood grain
   ctx.strokeStyle='rgba(110,65,25,.4)';ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(-2,-5);ctx.lineTo(-2,-40);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(-2,-5);ctx.lineTo(-2,-38);ctx.stroke();
+  // Trigger guard
   ctx.strokeStyle='#505050';ctx.lineWidth=2;
-  ctx.beginPath();ctx.arc(0,-16,6.5,0,Math.PI);ctx.stroke();
-  ctx.strokeStyle='#404040';ctx.lineWidth=5;
-  ctx.beginPath();ctx.moveTo(0,-32);ctx.lineTo(0,-72);ctx.stroke();
-  ctx.strokeStyle='#606060';ctx.lineWidth=2;
-  ctx.beginPath();ctx.moveTo(-1,-34);ctx.lineTo(-1,-70);ctx.stroke();
-  ctx.fillStyle='#303030';ctx.strokeStyle='#202020';ctx.lineWidth=1;
-  ctx.beginPath();rr(-4.5,-76,9,5,2);ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.arc(0,-14,6,0,Math.PI);ctx.stroke();
+  // Barrel
+  ctx.strokeStyle='#303030';ctx.lineWidth=5;
+  ctx.beginPath();ctx.moveTo(0,-30);ctx.lineTo(0,-70);ctx.stroke();
+  // Barrel highlight
+  ctx.strokeStyle='#555';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(-1,-32);ctx.lineTo(-1,-68);ctx.stroke();
+  // Muzzle
+  ctx.fillStyle='#222';ctx.strokeStyle='#111';ctx.lineWidth=1;
+  ctx.beginPath();rr(-4,-74,8,5,2);ctx.fill();ctx.stroke();
+  // Muzzle flash
   if(muzzleFlash>0){
-    ctx.save();ctx.translate(0,-76);ctx.globalAlpha=muzzleFlash;
+    ctx.save();ctx.translate(0,-74);ctx.globalAlpha=muzzleFlash;
     const grd=ctx.createRadialGradient(0,0,0,0,0,18);
     grd.addColorStop(0,'rgba(255,240,90,1)');grd.addColorStop(.5,'rgba(255,140,20,.8)');grd.addColorStop(1,'rgba(255,60,0,0)');
     ctx.fillStyle=grd;ctx.beginPath();ctx.arc(0,0,18,0,Math.PI*2);ctx.fill();
@@ -552,31 +585,50 @@ function drawDebbie(){
     ctx.restore();
   }
   ctx.restore();
+
+  // Right hand gripping gun
   ctx.fillStyle='#f0a870';ctx.strokeStyle='#d09050';ctx.lineWidth=1;
-  ctx.beginPath();ctx.ellipse(27,-25,5.5,4,.3,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.fillStyle='#f5b890';ctx.beginPath();rr(-5,-20,10,6,3);ctx.fill();
-  ctx.fillStyle='#f5b890';ctx.strokeStyle='#e09070';ctx.lineWidth=1.5;
-  ctx.beginPath();ctx.ellipse(0,-34,19,21,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.fillStyle='#5a3010';ctx.beginPath();ctx.arc(0,-38,18,Math.PI+.1,-0.1);ctx.fill();
-  ctx.beginPath();ctx.ellipse(-16,-33,6,13,-.2,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.ellipse(16,-33,6,13,.2,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='#6e4220';ctx.beginPath();ctx.arc(0,-44,14.5,Math.PI+.05,-.05);ctx.fill();
-  ctx.fillStyle='#5a3010';ctx.beginPath();ctx.ellipse(-4,-52,8,5,.3,0,Math.PI*2);ctx.fill();
-  ctx.beginPath();ctx.ellipse(5,-52,8,5,-.25,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle='#8a5a38';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(-2,-47,9,Math.PI+.4,-.3);ctx.stroke();
+  ctx.beginPath();ctx.ellipse(25,-22,5,4,0.3,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+  // Neck (back of neck)
+  ctx.fillStyle='#e8a870';
+  ctx.beginPath();rr(-5,-20,10,7,3);ctx.fill();
+
+  // ── HEAD (back view) ──
+  // Head shape
+  ctx.fillStyle='#f0b888';ctx.strokeStyle='#d89060';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.ellipse(0,-34,18,20,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+  // Hair — short brown, back of head
+  // Main back-of-head mass
+  ctx.fillStyle='#5a3010';
+  ctx.beginPath();ctx.ellipse(0,-36,18,20,0,0,Math.PI*2);ctx.fill();
+  // Top of head
+  ctx.fillStyle='#6e4220';
+  ctx.beginPath();ctx.arc(0,-44,14,0,Math.PI*2);ctx.fill();
+  // Nape hair curl
+  ctx.fillStyle='#5a3010';
+  ctx.beginPath();ctx.ellipse(-4,-18,6,5,0.4,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(4,-18,6,5,-0.4,0,Math.PI*2);ctx.fill();
+  // Side hair bits
+  ctx.beginPath();ctx.ellipse(-16,-34,5,12,0.1,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(16,-34,5,12,-0.1,0,Math.PI*2);ctx.fill();
+  // Hair sheen (highlight)
+  ctx.strokeStyle='#8a5a38';ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(3,-44,10,Math.PI+0.6,Math.PI*2-0.2);ctx.stroke();
+  ctx.strokeStyle='rgba(180,130,80,0.4)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.arc(-2,-38,8,Math.PI+0.3,-0.1);ctx.stroke();
+
+  // Ears (just peeking out from hair)
   ctx.fillStyle='#f0a878';ctx.strokeStyle='#d09060';ctx.lineWidth=1;
-  ctx.beginPath();ctx.ellipse(-18,-36,5,7,.15,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.beginPath();ctx.ellipse(18,-36,5,7,-.15,0,Math.PI*2);ctx.fill();ctx.stroke();
-  ctx.fillStyle='#2a1a08';ctx.beginPath();ctx.arc(-7,-36,3,0,Math.PI*2);ctx.arc(7,-36,3,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle='rgba(255,255,255,.92)';ctx.beginPath();ctx.arc(-6,-37,1.3,0,Math.PI*2);ctx.arc(8,-37,1.3,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle='#1a1008';ctx.lineWidth=2.2;
-  ctx.beginPath();rr(-16,-41,12,10,3);ctx.stroke();
-  ctx.beginPath();rr(4,-41,12,10,3);ctx.stroke();
-  ctx.lineWidth=1.8;ctx.beginPath();ctx.moveTo(-4,-36);ctx.lineTo(4,-36);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(-16,-36);ctx.lineTo(-22,-34);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(16,-36);ctx.lineTo(22,-34);ctx.stroke();
-  ctx.fillStyle='#e09060';ctx.beginPath();ctx.ellipse(1,-29,3,2,0,0,Math.PI*2);ctx.fill();
-  ctx.strokeStyle='#b06040';ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(0,-25,7,.2,Math.PI-.2);ctx.stroke();
+  ctx.beginPath();ctx.ellipse(-17,-35,4,6,0.1,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.beginPath();ctx.ellipse(17,-35,4,6,-0.1,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+  // Glasses arms visible from behind (just the temples)
+  ctx.strokeStyle='#1a1008';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(-17,-36);ctx.lineTo(-14,-36);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(17,-36);ctx.lineTo(14,-36);ctx.stroke();
+
   ctx.restore();
 }
 
@@ -681,32 +733,28 @@ function render(ts){
 
   if(phase==='title')
     drawCard('🌸 Garden Defender 🌸','#a02808',
-      ['Rabbits are invading!',
+      ['Rabbits are invading! Help Debbie protect her flowers',
        '🔫  Tap anywhere to move Debbie & shoot',
        '🐰  Defeat '+WIN+' rabbits to unlock Level 2',
        '🌸  Don\'t let them eat your flowers!'],
-      '🌼  Start Game  🌼');
-
-
-
+      '🌼  Start Game!  🌼');
   else if(phase==='levelup')
-    drawCard('🦌  Level 2!  🦌','#6a1a9a',
+    drawCard('🦌  Level 2  🦌','#6a1a9a',
       ['What have you done? You\'ve killed the waaaaabits...',
        'And now the deer have arrived!',
        ''],
-      '🔫  Get the bastards!');
-
+      '🔫  Get the bastards');
   else if(phase==='win')
     drawCard('🎉  Garden Saved!  🎉','#1a7a10',
       ['Debbie defeated the rabbits AND the deer! 🦌🐰',
-       'The flowers are safe. 🌷🌺🌸',''],
+       'The flowers are safe. What a hero! 🌷🌺🌸',''],
       '🌸  Play Again  🌸');
   else if(phase==='lose')
     drawCard('🐰  Oh no…  🐰','#aa1808',
       ['The garden invaders ate all your flowers!',
        'You got '+kills+' of them in Level '+level+' though…',
-       'Better luck next time!',''],
-      '🔫  Try Again!');
+       'Better luck text time!',''],
+      '🔫  Try Again');
   ctx.restore();
   requestAnimationFrame(render);
 }
@@ -724,8 +772,8 @@ function onButton(gx,gy){
 function handleInput(cx,cy){
   ensureAudio();
   const rect=canvas.getBoundingClientRect();
-  const gx=(cx-rect.left)/scale;
-  const gy=(cy-rect.top)/scale;
+  const gx=(cx-rect.left)/cssScale;
+  const gy=(cy-rect.top)/cssScale;
   if(phase==='title')  { if(onButton(gx,gy)){ resetGame(); phase='playing'; startMusic(); } return; }
   if(phase==='levelup'){ if(onButton(gx,gy)) startLevel2(); return; }
   if(phase==='win'||phase==='lose'){ if(onButton(gx,gy)){ resetGame(); phase='playing'; startMusic(); } return; }
