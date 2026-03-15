@@ -711,25 +711,29 @@ function render(ts){
 
   if(phase==='title')
     drawCard('🌸 Garden Defender 🌸','#a02808',
-      ['Rabbits are invading! Help Debbie protect her flowers.',
+      ['Rabbits are invading! Help Debbie protect her flowers!',
        '🔫  Tap anywhere to move Debbie & shoot',
        '🐰  Defeat '+WIN+' rabbits to unlock Level 2!',
        '🌸  Don\'t let them eat your flowers!'],
       '🌼  Start Game!  🌼');
   else if(phase==='levelup')
     drawCard('🦌  Level 2!  🦌','#6a1a9a',
-      ['What have you done? You\'ve killed the waaaaabits... And now the deer have arrived!',
+      ['What have you done? You\'ve killed the waaaaabits...',
+       'And now the deer have arrived!',
+       '🦌  Red, Roe & Fallow — all hungry, all coming for you.',
+       ''],
       '🔫  Bring It On!');
   else if(phase==='win')
     drawCard('🎉  Garden Saved!  🎉','#1a7a10',
       ['Debbie defeated the rabbits AND the deer! 🦌🐰',
-       'The flowers are safe. 🌷🌺🌸',''],
+       'The flowers are safe. What a hero! 🌷🌺🌸',
+       'Garden security: MAXIMUM.',''],
       '🌸  Play Again  🌸');
   else if(phase==='lose')
     drawCard('🐰  Oh no…  🐰','#aa1808',
       ['The garden invaders ate all your flowers!',
        'You got '+kills+' of them in Level '+level+' though…',
-       'Better luck next time!',''],
+       'Debbie needs a quicker trigger finger!',''],
       '🔫  Try Again!');
   ctx.restore();
   requestAnimationFrame(render);
