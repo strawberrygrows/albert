@@ -108,44 +108,18 @@ function playLose() {
     o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+0.4);
   });
 }
-// Music
-let musicRunning=false, musicTimer=null, musicBeat=0, melIdx=0, nextBeatTime=0;
-const BPM=150, BEAT=60/BPM;
-const BASS_NOTES=[65,65,69,72,65,65,67,72];
-const MELODY=[
-  [523,1],[659,0.5],[523,0.5],[784,1],[698,0.5],[659,0.5],
-  [659,1],[523,0.5],[659,0.5],[784,2],
-  [523,1],[659,0.5],[523,0.5],[698,1],[659,0.5],[523,0.5],
-  [587,1],[523,0.5],[587,0.5],[523,2]
-];
-function schedMusic(){
-  if(!audioCtx||!musicRunning) return;
-  while(nextBeatTime < audioCtx.currentTime+0.4){
-    const t=nextBeatTime;
-    const bf=BASS_NOTES[musicBeat%BASS_NOTES.length]*2;
-    const bo=audioCtx.createOscillator(),bg=audioCtx.createGain();
-    bo.type='square'; bo.frequency.value=bf;
-    bg.gain.setValueAtTime(0.042,t); bg.gain.linearRampToValueAtTime(0,t+BEAT*0.85);
-    bo.connect(bg); bg.connect(audioCtx.destination); bo.start(t); bo.stop(t+BEAT);
-    const [mf,mb]=MELODY[melIdx%MELODY.length];
-    if(mf>0){
-      const mo=audioCtx.createOscillator(),mg=audioCtx.createGain();
-      mo.type='triangle'; mo.frequency.value=mf;
-      mg.gain.setValueAtTime(0.068,t); mg.gain.linearRampToValueAtTime(0,t+BEAT*mb*0.82);
-      mo.connect(mg); mg.connect(audioCtx.destination); mo.start(t); mo.stop(t+BEAT*mb);
-    }
-    melIdx++; musicBeat++; nextBeatTime+=BEAT;
-  }
-}
+// ── MUSIC: external file ──────────────────────────────────────────
+const music = new Audio('soundtrack.mp3');
+music.loop = true;
+music.volume = 0.7;
+
 function startMusic(){
-  if(musicRunning) return;
-  ensureAudio(); musicRunning=true;
-  nextBeatTime=audioCtx.currentTime+0.05; musicBeat=0; melIdx=0;
-  musicTimer=setInterval(schedMusic,80);
+  music.currentTime = 0;
+  music.play().catch(()=>{});  // catch needed for autoplay policy
 }
 function stopMusic(){
-  musicRunning=false;
-  if(musicTimer){clearInterval(musicTimer);musicTimer=null;}
+  music.pause();
+  music.currentTime = 0;
 }
 
 // ── CONSTANTS ────────────────────────────────────────────────────
