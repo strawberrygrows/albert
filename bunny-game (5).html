@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>🐰 Bunny's Way Home</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: radial-gradient(ellipse at center, #4a9a3a 0%, #2d6b20 100%);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Baloo 2', cursive;
+    }
+    #game-container canvas {
+      border-radius: 18px;
+      box-shadow:
+        0 0 0 3px rgba(255,255,255,0.15),
+        0 12px 60px rgba(0,0,0,0.5),
+        0 4px 20px rgba(0,0,0,0.3);
+    }
+  </style>
+</head>
+<body>
+<div id="game-container"></div>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+<script>
+const W = 800, H = 600;
+
+// ─── SHARED AUDIO ───────────────────────────────────────────────────────────
+function _ac() {
+  if (!window.__ac) window.__ac = new (window.AudioContext||window.webkitAudioContext)();
+  if (window.__ac.state==='suspended') window.__ac.resume();
+  return window.__ac;
+}
+function _osc(freq,t,dur,type,vol){
+  type=type||'sine'; vol=vol||0.15;
+  const ac=_ac(),o=ac.createOscillator(),g=ac.createGain();
+  o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.018);
+  g.gain.exponentialRampToValueAtTime(0.001,t+Math.max(dur*0.84,0.04));
+  o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+dur+0.04);
+}
+function playChomp(){
+  try{
+    const ac=_ac(),t=ac.currentTime,sr=ac.sampleRate;
+    const buf=ac.createBuffer(1,sr*0.09,sr),d=buf.getChannelData(0);
+    for(let i=0;i<d.length;i++) d[i]=(Math.random()*2-1)*Math.exp(-i/(d.length*0.25));
+    const ns=ac.createBufferSource(); ns.buffer=buf;
+    const bp=ac.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=900; bp.Q.value=0.8;
+    const ng=ac.createGain(); ng.gain.setValueAtTime(0.35,t); ng.gain.exponentialRampToValueAtTime(0.001,t+0.12);
+    ns.connect(bp); bp.connect(ng); ng.connect(ac.destination); ns.start(); ns.stop(t+0.15);
+    const o2=ac.createOscillator(),g2=ac.createGain(); o2.type='sine';
+    o2.frequency.setValueAtTime(520,t); o2.frequency.exponentialRampToValueAtTime(160,t+0.1);
+    g2.gain.setValueAtTime(0.18,t); g2.gain.exponentialRampToValueAtTime(0.001,t+0.13);
+    o2.connect(g2); g2.connect(ac.destination); o2.start(t); o2.stop(t+0.15);
+  }catch(e){}
+}
+function playDaDing(){
+  try{
+    const ac=_ac(),t=ac.currentTime;
+    [[523,0,0.55],[659,0.13,0.5],[784,0.26,0.45],[1047,0.4,0.65],[1319,0.55,0.8]]
+      .forEach(function(arr){ _osc(arr[0],t+arr[1],arr[2],'sine',0.2); _osc(arr[0]*2,t+arr[1],arr[2]*0.35,'triangle',0.05); });
+    [523,659,784,1047].forEach(function(f){ _osc(f,t+0.8,1.6,'sine',0.11); });
+  }catch(e){}
+}
+function playZombieDie(){
+  try{
+    const ac=_ac(),t=ac.currentTime;
+    const o=ac.createOscillator(),g=ac.createGain();
+    o.type='sawtooth';
+    o.frequency.setValueAtTime(220,t); o.frequency.exponentialRampToValueAtTime(50,t+0.34);
+    g.gain.setValueAtTime(0.13,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.4);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+0.44);
+  }catch(e){}
+}
+function playBunnyHit(){
+  try{
+    const t=_ac().currentTime;
+    _osc(380,t,0.05,'square',0.14); _osc(190,t+0.05,0.18,'sine',0.11);
+  }catch(e){}
+}
+function playVictory(){
+  try{
+    const ac=_ac(),t=ac.currentTime;
+    [[392,0,0.22],[523,0.12,0.22],[659,0.24,0.22],[784,0.36,0.3],[1047,0.5,0.45],
+     [784,0.7,0.16],[880,0.84,0.16],[1047,0.98,0.16],[1319,1.12,1.1]]
+     .forEach(function(a){ _osc(a[0],t+a[1],a[2],'sine',0.18); _osc(a[0]*1.5,t+a[1],a[2]*0.25,'triangle',0.04); });
+    [523,659,784,1047,1319].forEach(function(f){ _osc(f,t+1.22,2.2,'sine',0.09); });
+  }catch(e){}
+}
+
+// ─── MUSIC PLAYER ───────────────────────────────────────────────────────────
+const Music=(function(){
+  var _tmr=null,_step=0,_nxt=0,_mode=null,LA=0.13;
+  function _n(ac,freq,t,dur,type,vol){
+    type=type||'triangle'; vol=vol||0.07;
+    if(!freq)return;
+    var o=ac.createOscillator(),g=ac.createGain();
+    o.type=type; o.frequency.value=freq;
+    g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(vol,t+0.02);
+    g.gain.exponentialRampToValueAtTime(0.001,t+dur*0.8);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+dur+0.02);
+  }
+  function stop(){ if(_tmr){clearInterval(_tmr);_tmr=null;} _mode=null; _step=0; }
+  var M1=[523,0,659,0,784,659,523,0, 880,784,659,784,523,659,587,523];
+  var B1=[131,0,131,0,174,0,196,0,   131,0,131,0,174,0,196,0];
+  function playAct1(){
+    stop(); var ac=_ac(); _mode='act1'; _step=0; _nxt=ac.currentTime+0.1;
+    _tmr=setInterval(function(){
+      if(_mode!=='act1')return;
+      var e=60/126/2;
+      while(_nxt<ac.currentTime+LA){
+        var s=_step%16;
+        _n(ac,M1[s],_nxt,e*1.1,'triangle',0.08);
+        _n(ac,B1[s],_nxt,e*1.85,'sine',0.07);
+        if(s%8===0&&M1[s]) _n(ac,M1[s]*1.26,_nxt,e*3,'triangle',0.03);
+        _nxt+=e; _step++;
+      }
+    },25);
+  }
+  var M2=[220,0,233,0,196,0,185,220, 220,233,0,220,175,185,0,220];
+  var B2=[55,0,55,0,55,0,55,0,        55,0,55,0,55,0,55,0];
+  function playAct2(){
+    stop(); var ac=_ac(); _mode='act2'; _step=0; _nxt=ac.currentTime+0.1;
+    _tmr=setInterval(function(){
+      if(_mode!=='act2')return;
+      var e=60/76/2;
+      while(_nxt<ac.currentTime+LA){
+        var s=_step%16;
+        if(M2[s]) _n(ac,M2[s],_nxt,e*0.72,'triangle',0.05);
+        _n(ac,B2[s],_nxt,e*0.92,'sine',0.09);
+        if(s===6||s===14) _n(ac,466,_nxt,e*0.32,'square',0.022);
+        _nxt+=e; _step++;
+      }
+    },25);
+  }
+  return {stop:stop,playAct1:playAct1,playAct2:playAct2};
+})();
+
+// ─── TEXTURE FACTORY ────────────────────────────────────────────────────────
+function buildTextures(scene) {
+  let g = scene.add.graphics();
+
+  // GRASS tiles
+  g.fillStyle(0x7ecb6a); g.fillRect(0,0,64,64);
+  g.fillStyle(0x88d474,0.35); g.fillEllipse(20,28,18,8); g.fillEllipse(48,14,14,6); g.fillEllipse(38,48,16,7);
+  g.generateTexture('grass_a',64,64); g.clear();
+
+  g.fillStyle(0x6eba5c); g.fillRect(0,0,64,64);
+  g.fillStyle(0x78c864,0.3); g.fillEllipse(10,40,20,8); g.fillEllipse(50,22,12,5); g.fillEllipse(30,10,16,7);
+  g.generateTexture('grass_b',64,64); g.clear();
+
+  // PATH tile (earthy golden)
+  g.fillStyle(0xd6b07a); g.fillRect(0,0,32,32);
+  g.fillStyle(0xc4a068,0.4); g.fillEllipse(8,12,6,3); g.fillEllipse(22,22,7,3); g.fillEllipse(15,6,5,2);
+  g.generateTexture('path',32,32); g.clear();
+
+  // BUNNY (top-down, very cute) — all y coords shifted +14 so ears don't clip
+  // shadow
+  g.fillStyle(0x000000,0.15); g.fillEllipse(22,61,34,10);
+  // body
+  g.fillStyle(0xf6f0e4); g.fillEllipse(22,45,28,36);
+  // ears
+  g.fillStyle(0xf6f0e4); g.fillEllipse(12,21,11,24); g.fillEllipse(32,21,11,24);
+  g.fillStyle(0xf8b8c8); g.fillEllipse(12,21,5.5,16); g.fillEllipse(32,21,5.5,16);
+  // head
+  g.fillStyle(0xf6f0e4); g.fillCircle(22,33,13);
+  // eyes
+  g.fillStyle(0x1a0800); g.fillCircle(17,30,2.8); g.fillCircle(27,30,2.8);
+  // eye shine
+  g.fillStyle(0xffffff); g.fillCircle(18,29,1.1); g.fillCircle(28,29,1.1);
+  // nose
+  g.fillStyle(0xf498b0); g.fillEllipse(22,35,5,3.5);
+  // mouth dots
+  g.fillStyle(0xd07090); g.fillCircle(20,37,1.1); g.fillCircle(24,37,1.1);
+  // whiskers
+  g.lineStyle(1,0xbbbbbb,0.55);
+  g.lineBetween(22,35,7,32); g.lineBetween(22,35,7,38);
+  g.lineBetween(22,35,37,32); g.lineBetween(22,35,37,38);
+  // tail
+  g.fillStyle(0xffffff); g.fillCircle(22,60,5.5);
+  // paws
+  g.fillStyle(0xede8da); g.fillEllipse(9,49,11,7); g.fillEllipse(35,49,11,7);
+  g.generateTexture('bunny',44,70); g.clear();
+
+  // TREE (fluffy top-down)
+  g.fillStyle(0x000000,0.18); g.fillEllipse(30,58,44,14);
+  g.fillStyle(0x338826); g.fillCircle(30,26,27);
+  g.fillStyle(0x449933); g.fillCircle(30,23,22);
+  g.fillStyle(0x58b044); g.fillCircle(28,20,16);
+  g.fillStyle(0x70cc5a); g.fillCircle(31,17,10);
+  g.fillStyle(0x7a5530); g.fillRect(25,48,10,14);
+  g.generateTexture('tree',60,64); g.clear();
+
+  // BUSH (smaller obstacle)
+  g.fillStyle(0x000000,0.12); g.fillEllipse(22,38,32,10);
+  g.fillStyle(0x3a8824); g.fillCircle(22,22,20);
+  g.fillStyle(0x4ea034); g.fillCircle(20,19,15);
+  g.fillStyle(0x64bc48); g.fillCircle(24,16,10);
+  g.generateTexture('bush',44,42); g.clear();
+
+  // HOUSE (charming storybook cottage)
+  // shadow
+  g.fillStyle(0x000000,0.13); g.fillEllipse(56,114,96,16);
+  // walls — creamy plaster
+  g.fillStyle(0xfff3d8); g.fillRect(8,50,96,64);
+  // subtle stone lines
+  g.lineStyle(1,0xe8d4a8,0.4);
+  for(let y=60;y<114;y+=11){ g.lineBetween(8,y,104,y); }
+  for(let x=8;x<104;x+=22){ g.lineBetween(x,50,x,114); }
+  // door frame + door
+  g.fillStyle(0x6e3e1a); g.fillRect(39,72,34,42);
+  g.fillStyle(0x8a5230); g.fillRect(41,74,30,40);
+  // door arch
+  g.fillStyle(0x6e3e1a); g.fillEllipse(56,73,32,14);
+  g.fillStyle(0x8a5230); g.fillEllipse(56,74,28,11);
+  // door knob
+  g.fillStyle(0xd4a020); g.fillCircle(65,94,3.2);
+  // windows
+  g.fillStyle(0xb8e8f8); g.fillRect(13,62,22,20); g.fillRect(77,62,22,20);
+  g.lineStyle(2.5,0x6e3e1a); g.strokeRect(13,62,22,20); g.strokeRect(77,62,22,20);
+  g.lineBetween(24,62,24,82); g.lineBetween(13,72,35,72);
+  g.lineBetween(88,62,88,82); g.lineBetween(77,72,99,72);
+  // curtain hints
+  g.fillStyle(0xffddcc,0.45); g.fillRect(13,63,10,18); g.fillRect(77,63,10,18);
+  // roof
+  g.fillStyle(0xaa2828); g.fillTriangle(2,52,56,4,110,52);
+  g.fillStyle(0xcc3838); g.fillTriangle(5,52,56,9,107,52);
+  // roof texture lines
+  g.lineStyle(1.5,0x882020,0.45);
+  g.lineBetween(5,52,56,9); g.lineBetween(107,52,56,9);
+  for(let i=0;i<5;i++){
+    const x1=5+i*20, y1=52-i*8.6;
+    g.lineBetween(x1,y1,x1+18,y1-7.7);
+  }
+  // chimney
+  g.fillStyle(0xcc8866); g.fillRect(74,8,18,32);
+  g.fillStyle(0xaa6644); g.fillRect(71,6,24,6);
+  // smoke puffs
+  g.fillStyle(0xdddddd,0.5); g.fillCircle(83,2,5.5); g.fillCircle(90,-4,4.5);
+  g.fillStyle(0xcccccc,0.3); g.fillCircle(97,-9,4);
+  // welcome mat
+  g.fillStyle(0x9c6644); g.fillRoundedRect(40,111,32,8,3);
+  g.lineStyle(1.5,0xcc9966); g.strokeRoundedRect(40,111,32,8,3);
+  g.generateTexture('house',112,122); g.clear();
+
+  // CARROT
+  g.fillStyle(0x2a8c2a);
+  g.fillTriangle(12,9,15,1,18,9); g.fillTriangle(8,10,12,2,16,10); g.fillTriangle(16,10,20,2,24,10);
+  g.fillStyle(0xff7c00); g.fillTriangle(7,9,16,31,25,9);
+  g.fillStyle(0xffaa44,0.5); g.fillTriangle(10,11,15,26,18,11);
+  g.generateTexture('carrot',32,34); g.clear();
+
+  // CLOUD
+  g.fillStyle(0xffffff,0.85);
+  g.fillCircle(30,32,20); g.fillCircle(50,27,25); g.fillCircle(70,32,20);
+  g.fillCircle(42,22,19); g.fillCircle(62,22,18);
+  g.generateTexture('cloud',104,55); g.clear();
+
+  // FLOWERS
+  const pColors=[0xff69b4,0xff5555,0xffdd44,0xcc77dd,0xff7744,0x66ccee];
+  pColors.forEach((col,i)=>{
+    g.fillStyle(col);
+    for(let a=0;a<6;a++){
+      g.fillCircle(11+Math.cos(a*Math.PI/3)*5.5, 11+Math.sin(a*Math.PI/3)*5.5, 3.8);
+    }
+    g.fillStyle(0xfffacc); g.fillCircle(11,11,3.8);
+    g.generateTexture(`fl_${i}`,24,24); g.clear();
+  });
+
+  // D-PAD buttons
+  const DS=56;
+  ['up','down','left','right'].forEach(dir=>{
+    g.fillStyle(0x000000,0.32); g.fillRoundedRect(0,0,DS,DS,12);
+    g.lineStyle(2,0xffffff,0.45); g.strokeRoundedRect(0,0,DS,DS,12);
+    g.fillStyle(0xffffff,0.75);
+    if(dir==='up')    g.fillTriangle(DS/2,9,  DS/2-11,24, DS/2+11,24);
+    if(dir==='down')  g.fillTriangle(DS/2,DS-9,DS/2-11,DS-24,DS/2+11,DS-24);
+    if(dir==='left')  g.fillTriangle(9,DS/2,  24,DS/2-11, 24,DS/2+11);
+    if(dir==='right') g.fillTriangle(DS-9,DS/2,DS-24,DS/2-11,DS-24,DS/2+11);
+    g.generateTexture(`btn_${dir}`,DS,DS); g.clear();
+  });
+
+  // HOME GLOW pulse ring
+  g.fillStyle(0xffe055,0.5); g.fillCircle(24,24,22);
+  g.fillStyle(0xffffff,0.3); g.fillCircle(24,24,13);
+  g.generateTexture('glow',48,48); g.clear();
+
+  // ZOMBIE (44×70, top-down, menacing)
+  g.fillStyle(0x000000,0.2); g.fillEllipse(22,64,38,10);  // shadow
+  g.fillStyle(0x4a7c3c); g.fillEllipse(22,46,30,38);       // body
+  g.fillStyle(0x2a5020); g.fillTriangle(8,52,14,66,20,52); g.fillTriangle(24,52,30,66,36,52); // rags
+  g.fillStyle(0x4a7c3c); g.fillEllipse(6,36,10,20); g.fillEllipse(38,36,10,20); // arms
+  g.fillStyle(0x3a6030); g.fillCircle(6,27,5.5); g.fillCircle(38,27,5.5);       // hands
+  g.lineStyle(2,0x224418,0.9);                                                   // claws
+  g.lineBetween(4,22,2,18); g.lineBetween(6,22,6,17); g.lineBetween(9,23,11,18);
+  g.lineBetween(35,22,33,18); g.lineBetween(38,22,38,17); g.lineBetween(41,23,43,18);
+  g.fillStyle(0x5a8a4a); g.fillCircle(22,24,14);           // head
+  g.fillStyle(0x234818); g.fillTriangle(14,12,17,5,20,12); g.fillTriangle(22,10,25,3,28,10); g.fillTriangle(28,13,31,6,34,13); // hair
+  g.lineStyle(3,0xdd1111);                                  // X eyes
+  g.lineBetween(14,18,20,24); g.lineBetween(20,18,14,24);
+  g.lineBetween(25,18,31,24); g.lineBetween(31,18,25,24);
+  g.fillStyle(0x0a0000); g.fillEllipse(22,33,16,8);         // mouth
+  g.fillStyle(0xccccaa); g.fillRect(15,29,3,5); g.fillRect(20,29,3,5); g.fillRect(25,29,3,5); // teeth
+  g.lineStyle(2,0x44cc44,0.55); g.lineBetween(23,37,23,43); g.lineBetween(19,36,17,41); // drool
+  g.generateTexture('zombie',44,70); g.clear();
+
+  // BULLET (small orange orb)
+  g.fillStyle(0xff8800); g.fillCircle(7,7,7);
+  g.fillStyle(0xffcc44,0.7); g.fillCircle(5,5,4);
+  g.fillStyle(0xffffff,0.4); g.fillCircle(4,4,2);
+  g.generateTexture('bullet',14,14); g.clear();
+
+  // HEART (for HP display)
+  g.fillStyle(0xff2244);
+  g.fillCircle(6,5,5); g.fillCircle(12,5,5);
+  g.fillTriangle(1,7,9,19,17,7);
+  g.fillStyle(0xff99aa,0.5); g.fillCircle(5,4,2.5);
+  g.generateTexture('heart',18,20); g.clear();
+
+  g.destroy();
+}
+
+// ─── TITLE SCENE ────────────────────────────────────────────────────────────
+class TitleScene extends Phaser.Scene {
+  constructor(){ super({key:'TitleScene'}); }
+
+  create(){
+    buildTextures(this);
+
+    // Sky-to-grass gradient
+    const bg = this.add.graphics();
+    bg.fillGradientStyle(0x8ecfe8,0x8ecfe8,0x7dcc6a,0x7dcc6a,1);
+    bg.fillRect(0,0,W,H);
+
+    // Distant clouds
+    this.add.image(130,80,'cloud').setAlpha(0.75).setScale(1.3);
+    this.add.image(560,110,'cloud').setAlpha(0.65).setScale(1.1);
+    this.add.image(720,55,'cloud').setAlpha(0.55).setScale(0.85);
+
+    // Decorative trees
+    this.add.image(55,430,'tree').setScale(1.2);
+    this.add.image(740,415,'tree').setScale(1.0);
+    this.add.image(145,500,'tree').setScale(0.85);
+    this.add.image(660,500,'bush').setScale(1.3);
+
+    // Scattered flowers
+    const fpos=[[90,350],[200,490],[340,510],[480,540],[600,480],[700,360],[750,540],[50,540],[280,420],[440,410]];
+    fpos.forEach(([x,y])=>{
+      this.add.image(x,y,`fl_${Phaser.Math.Between(0,5)}`).setScale(Phaser.Math.FloatBetween(1,1.5));
+    });
+
+    // House visible top-right
+    this.add.image(680,220,'house').setScale(1.25).setAlpha(0.95);
+
+    // Title card
+    const card = this.add.graphics();
+    card.fillStyle(0xfff8e8,0.92);
+    card.fillRoundedRect(W/2-230,50,460,150,22);
+    card.lineStyle(3,0xd4a030,0.8);
+    card.strokeRoundedRect(W/2-230,50,460,150,22);
+
+    this.add.text(W/2,108,'🐰 Bunny\'s Way Home',{
+      fontFamily:"'Baloo 2',sans-serif", fontSize:'40px', fontStyle:'bold',
+      color:'#7a3a00', stroke:'#ffe099', strokeThickness:5,
+      shadow:{blur:6,color:'#b06020',fill:true}
+    }).setOrigin(0.5);
+
+    this.add.text(W/2,158,'A charming tale of one very lost bunny',{
+      fontFamily:"'Baloo 2',sans-serif", fontSize:'19px',
+      color:'#8a5530', stroke:'#fff0c0', strokeThickness:3
+    }).setOrigin(0.5);
+
+    // Bouncing hero bunny
+    const hero = this.add.image(W/2,320,'bunny').setScale(3.5);
+    this.tweens.add({targets:hero, y:308, duration:750, yoyo:true, repeat:-1, ease:'Sine.easeInOut'});
+
+    // Info panel
+    const info = this.add.graphics();
+    info.fillStyle(0x1a3a0a,0.35);
+    info.fillRoundedRect(W/2-190,380,380,80,14);
+    info.lineStyle(2,0x88cc55,0.4);
+    info.strokeRoundedRect(W/2-190,380,380,80,14);
+
+    this.add.text(W/2,402,'Arrow keys / WASD to move',{
+      fontFamily:"'Baloo 2',sans-serif", fontSize:'17px', color:'#eeffcc',
+    }).setOrigin(0.5);
+    this.add.text(W/2,432,'Collect carrots 🥕 and find your way home 🏡',{
+      fontFamily:"'Baloo 2',sans-serif", fontSize:'15px', color:'#ffe066',
+    }).setOrigin(0.5);
+
+    // Start button
+    const btnG = this.add.graphics();
+    const drawBtn = (over)=>{
+      btnG.clear();
+      btnG.fillStyle(over?0xff9944:0xff7830);
+      btnG.fillRoundedRect(W/2-115,490,230,62,16);
+      btnG.lineStyle(3,0xffd055,1);
+      btnG.strokeRoundedRect(W/2-115,490,230,62,16);
+    };
+    drawBtn(false);
+
+    const btnT = this.add.text(W/2,521,'🐾  Let\'s Go!',{
+      fontFamily:"'Baloo 2',sans-serif", fontSize:'28px', fontStyle:'bold',
+      color:'#ffffff', stroke:'#7a2800', strokeThickness:4
+    }).setOrigin(0.5);
+
+    const btnZone = this.add.zone(W/2,521,230,62).setInteractive({useHandCursor:true});
+    btnZone.on('pointerover',()=>drawBtn(true));
+    btnZone.on('pointerout',()=>drawBtn(false));
+    btnZone.on('pointerdown',()=>this._startGame());
+    this.input.keyboard.once('keydown',()=>this._startGame());
+
+    this.cameras.main.fadeIn(600);
+  }
+
+  _startGame(){
+    this.cameras.main.fade(400,0,0,0);
+    this.time.delayedCall(400,()=>this.scene.start('GameScene'));
+  }
+}
+
+// ─── GAME SCENE ─────────────────────────────────────────────────────────────
+class GameScene extends Phaser.Scene {
+  constructor(){ super({key:'GameScene'}); }
+
+  create(){
+    this.carrotsGot = 0;
+    this.totalCarrots = 5;
+    this.won = false;
+    this.dpad = {up:false,down:false,left:false,right:false};
+
+    this._buildWorld();
+    this._buildPlayer();
+    this._buildUI();
+    this._buildDPad();
+    this._buildHint();
+
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.wasd   = this.input.keyboard.addKeys({up:'W',down:'S',left:'A',right:'D'});
+
+    Music.playAct1();
+    this.cameras.main.fadeIn(500);
+  }
+
+  _buildWorld(){
+    // Tiled grass background
+    for(let x=0;x<W;x+=64){
+      for(let y=0;y<H;y+=64){
+        const key = ((x/64+y/64)%2===0)?'grass_a':'grass_b';
+        this.add.image(x+32,y+32,key).setDepth(0);
+      }
+    }
+
+    // Winding dirt path from start → house (maze-like, doubles back)
+    const pts=[
+      [80,540],   // start bottom-left
+      [220,535],  // head right along bottom
+      [270,465],  // turn up
+      [180,415],  // double back left
+      [115,340],  // continue up-left
+      [160,265],  // turn right-up
+      [280,240],  // go right
+      [370,310],  // turn down-right
+      [480,330],  // continue right
+      [540,250],  // turn up
+      [460,175],  // double back left
+      [370,140],  // continue left
+      [430,80],   // turn right-up
+      [560,90],   // go right
+      [630,150],  // turn down-right to house
+      [695,135]   // arrive at house
+    ];
+    for(let i=0;i<pts.length-1;i++){
+      const [x1,y1]=pts[i],[x2,y2]=pts[i+1];
+      const steps=Math.ceil(Math.hypot(x2-x1,y2-y1)/20);
+      for(let s=0;s<=steps;s++){
+        const t=s/steps;
+        this.add.image(x1+(x2-x1)*t, y1+(y2-y1)*t,'path').setAlpha(0.72).setDepth(1);
+      }
+    }
+
+    // Flowers scattered around
+    const fpos=[
+      [110,210],[170,390],[290,480],[440,370],[380,140],
+      [575,450],[670,350],[195,170],[148,305],[510,490],
+      [745,210],[715,470],[448,510],[255,125],[595,270],
+      [330,230],[488,160],[620,540],[75,420],[720,120]
+    ];
+    fpos.forEach(([x,y])=>{
+      this.add.image(x,y,`fl_${Phaser.Math.Between(0,5)}`)
+        .setScale(Phaser.Math.FloatBetween(0.85,1.45)).setDepth(2);
+    });
+
+    // Drifting clouds (depth 3 - above grass, below objects)
+    this.clouds=[];
+    for(let i=0;i<3;i++){
+      const c=this.add.image(
+        Phaser.Math.Between(0,W),
+        Phaser.Math.Between(20,110),
+        'cloud'
+      ).setAlpha(0.55).setScale(Phaser.Math.FloatBetween(0.8,1.4)).setDepth(3);
+      c.spd=Phaser.Math.FloatBetween(0.12,0.35);
+      this.clouds.push(c);
+    }
+
+    // HOME GLOW behind house
+    this.glow=this.add.image(695,128,'glow').setScale(3.5).setAlpha(0.6).setDepth(4);
+    this.tweens.add({targets:this.glow, scaleX:4.2, scaleY:4.2, alpha:0.25, duration:1100, yoyo:true, repeat:-1, ease:'Sine.easeInOut'});
+
+    // House (goal)
+    this.house=this.add.image(695,112,'house').setScale(1.1).setDepth(5);
+
+    // Trees (physics colliders)
+    this.trees=this.physics.add.staticGroup();
+    [
+      [200,160],[370,215],[155,335],[505,295],
+      [305,430],[445,135],[605,415],[710,285],
+      [575,520],[245,525]
+    ].forEach(([x,y])=>{
+      const t=this.trees.create(x,y,'tree').setDepth(6);
+      t.body.setSize(38,38); t.body.setOffset(11,6); t.refreshBody();
+    });
+
+    // Bushes (additional obstacles)
+    this.bushes=this.physics.add.staticGroup();
+    [[350,100],[175,250],[490,490],[640,480],[100,300]].forEach(([x,y])=>{
+      const b=this.bushes.create(x,y,'bush').setDepth(6);
+      b.body.setSize(32,26); b.body.setOffset(6,8); b.refreshBody();
+    });
+
+    // Carrots
+    this.carrots=this.physics.add.staticGroup();
+    [[162,240],[318,308],[512,196],[428,432],[618,285]].forEach(([x,y])=>{
+      const c=this.carrots.create(x,y,'carrot').setDepth(7);
+      c.body.setSize(18,22); c.body.setOffset(7,6); c.refreshBody();
+      this.tweens.add({targets:c, y:y-6, duration:650+Phaser.Math.Between(0,300), yoyo:true, repeat:-1, ease:'Sine.easeInOut'});
+    });
+  }
+
+  _buildPlayer(){
+    this.bunny=this.physics.add.sprite(80,530,'bunny').setScale(1.1).setDepth(10);
+    this.bunny.setCollideWorldBounds(true);
+    this.bunny.body.setSize(26,20); this.bunny.body.setOffset(9,28);
+
+    this.isMoving=false; this.bobTween=null;
+
+    this.physics.add.collider(this.bunny,this.trees);
+    this.physics.add.collider(this.bunny,this.bushes);
+    this.physics.add.overlap(this.bunny,this.carrots,(b,c)=>this._collectCarrot(c));
+  }
+
+  _buildUI(){
+    // Carrot counter top-right
+    const uibg=this.add.graphics().setDepth(25);
+    uibg.fillStyle(0x000000,0.3); uibg.fillRoundedRect(W-148,10,136,48,12);
+    uibg.lineStyle(2,0xffdd44,0.5); uibg.strokeRoundedRect(W-148,10,136,48,12);
+    this.add.image(W-126,34,'carrot').setScale(0.9).setDepth(26);
+    this.ctText=this.add.text(W-108,34,`${this.carrotsGot} / ${this.totalCarrots}`,{
+      fontFamily:"'Baloo 2',sans-serif", fontSize:'26px', fontStyle:'bold',
+      color:'#ffe055', stroke:'#7a3400', strokeThickness:4
+    }).setOrigin(0,0.5).setDepth(26);
+  }
+
+  _buildDPad(){
+    const cx=80, cy=H-105, step=62;
+    [['up',cx,cy-step],['down',cx,cy+step],['left',cx-step,cy],['right',cx+step,cy]].forEach(([dir,x,y])=>{
+      const btn=this.add.image(x,y,`btn_${dir}`).setDepth(30).setAlpha(0.65).setInteractive({useHandCursor:false});
+      btn.on('pointerdown',()=>{ this.dpad[dir]=true; this.tweens.add({targets:btn,alpha:1,duration:60}); });
+      btn.on('pointerup',()=>{ this.dpad[dir]=false; this.tweens.add({targets:btn,alpha:0.65,duration:80}); });
+      btn.on('pointerout',()=>{ this.dpad[dir]=false; this.tweens.add({targets:btn,alpha:0.65,duration:80}); });
+    });
+  }
+
+  _buildHint(){
+    const h=this.add.text(W/2,H-18,'Arrow keys or D-pad  •  Collect carrots  •  Follow the path home 🏡',{
+      fontFamily:"'Baloo 2',sans-serif", fontSize:'13px',
+      color:'#ffffff', stroke:'#2a5010', strokeThickness:3, alpha:0.85
+    }).setOrigin(0.5,1).setDepth(25);
+    this.tweens.add({targets:h, alpha:0, delay:5000, duration:1800});
+  }
+
+  _collectCarrot(c){
+    // pop animation
+    const pop=this.add.text(c.x,c.y-8,'+🥕',{fontFamily:"'Baloo 2',sans-serif",fontSize:'22px'}).setDepth(35);
+    this.tweens.add({targets:pop, y:c.y-52, alpha:0, duration:750, onComplete:()=>pop.destroy()});
+    playChomp();
+    c.destroy();    this.carrotsGot++;
+    this.ctText.setText(`${this.carrotsGot} / ${this.totalCarrots}`);
+    // little pulse on counter
+    this.tweens.add({targets:this.ctText, scaleX:1.3, scaleY:1.3, duration:120, yoyo:true});
+  }
+
+  _checkWin(){
+    if(Phaser.Math.Distance.Between(this.bunny.x,this.bunny.y,695,148)<52){
+      this.won=true;
+      this.bunny.setVelocity(0,0);
+      this.physics.pause();
+      this._showWin();
+    }
+  }
+
+  _showWin(){
+    Music.stop();
+    playDaDing();
+
+    // burst of emojis
+    const emojis=['⭐','🌟','✨','🥕','🐰','🌸','💛'];
+    for(let i=0;i<24;i++){
+      this.time.delayedCall(i*55,()=>{
+        const ex=Phaser.Math.Between(80,720), ey=Phaser.Math.Between(80,520);
+        const e=this.add.text(ex,ey,emojis[Phaser.Math.Between(0,emojis.length-1)],
+          {fontSize:`${Phaser.Math.Between(18,38)}px`}).setDepth(40).setAlpha(0);
+        this.tweens.add({targets:e, alpha:1, y:ey-55, duration:500, ease:'Back.easeOut',
+          onComplete:()=>this.tweens.add({targets:e, alpha:0, duration:400, delay:300, onComplete:()=>e.destroy()})
+        });
+      });
+    }
+
+    this.time.delayedCall(700,()=>{
+      const ov=this.add.graphics().setDepth(48);
+      let prog=0;
+      this.time.addEvent({delay:16,repeat:30,callback:()=>{
+        prog+=1/30; ov.clear();
+        ov.fillStyle(0x0a1e04,Math.min(prog*0.65,0.65)); ov.fillRect(0,0,W,H);
+      }});
+
+      this.time.delayedCall(550,()=>{
+        const px=W/2-230, py=H/2-170;
+        const panel=this.add.graphics().setDepth(50);
+        panel.fillStyle(0xfff8e8,1); panel.fillRoundedRect(px,py,460,340,24);
+        panel.lineStyle(4,0xd4a020,1); panel.strokeRoundedRect(px,py,460,340,24);
+        panel.lineStyle(2,0xffe077,0.5); panel.strokeRoundedRect(px+8,py+8,444,324,18);
+        panel.setScale(0.2).setAlpha(0);
+        this.tweens.add({targets:panel, scaleX:1, scaleY:1, alpha:1, duration:380, ease:'Back.easeOut'});
+
+        const tStyle={fontFamily:"'Baloo 2',sans-serif"};
+        const t1=this.add.text(W/2,py+65,'You\'re Home! 🏡',
+          {...tStyle,fontSize:'44px',fontStyle:'bold',color:'#7a3a00',stroke:'#ffe099',strokeThickness:5})
+          .setOrigin(0.5).setDepth(51).setAlpha(0);
+        const t2=this.add.text(W/2,py+118,'Well done, little bunny! 🐰',
+          {...tStyle,fontSize:'22px',color:'#4a7a18',stroke:'#eeffcc',strokeThickness:3})
+          .setOrigin(0.5).setDepth(51).setAlpha(0);
+        const allCarrots=this.carrotsGot===this.totalCarrots;
+        const carrotLine=allCarrots?`🥕 All ${this.totalCarrots} carrots found — brilliant!`:`🥕 ${this.carrotsGot} / ${this.totalCarrots} carrots collected`;
+        const t3=this.add.text(W/2,py+156,carrotLine,{...tStyle,fontSize:'19px',color:'#8a4c1c'})
+          .setOrigin(0.5).setDepth(51).setAlpha(0);
+
+        [t1,t2,t3].forEach((t,i)=>this.time.delayedCall(i*180,()=>{
+          this.tweens.add({targets:t, alpha:1, y:t.y-8, duration:360, ease:'Back.easeOut'});
+        }));
+
+        this.time.delayedCall(700,()=>{
+          // ── Main: Defend button ──
+          const bx1=W/2-150, by1=py+188;
+          const bg1=this.add.graphics().setDepth(51);
+          const drawB1=(ov2)=>{
+            bg1.clear();
+            bg1.fillStyle(ov2?0x44bb44:0x2a8a2a); bg1.fillRoundedRect(bx1,by1,300,56,14);
+            bg1.lineStyle(3,0x99ee66); bg1.strokeRoundedRect(bx1,by1,300,56,14);
+          };
+          drawB1(false);
+          this.add.text(W/2,by1+28,'🧟  Defend the Warren!',
+            {...tStyle,fontSize:'22px',fontStyle:'bold',color:'#ffffff',stroke:'#0a2a0a',strokeThickness:4})
+            .setOrigin(0.5).setDepth(52);
+          const bz1=this.add.zone(W/2,by1+28,300,56).setInteractive({useHandCursor:true}).setDepth(52);
+          bz1.on('pointerover',()=>drawB1(true));
+          bz1.on('pointerout',()=>drawB1(false));
+          bz1.on('pointerdown',()=>{
+            this.cameras.main.fade(500,0,0,0);
+            this.time.delayedCall(500,()=>this.scene.start('ZombieScene'));
+          });
+
+          // ── Secondary: Play Again ──
+          const by2=py+256;
+          const bg2=this.add.graphics().setDepth(51);
+          const drawB2=(ov2)=>{
+            bg2.clear();
+            bg2.fillStyle(ov2?0x776655:0x554433); bg2.fillRoundedRect(W/2-90,by2,180,42,10);
+            bg2.lineStyle(2,0xaa9977); bg2.strokeRoundedRect(W/2-90,by2,180,42,10);
+          };
+          drawB2(false);
+          this.add.text(W/2,by2+21,'↩  Play Again',
+            {...tStyle,fontSize:'17px',color:'#ffe0aa',stroke:'#2a1800',strokeThickness:3})
+            .setOrigin(0.5).setDepth(52);
+          const bz2=this.add.zone(W/2,by2+21,180,42).setInteractive({useHandCursor:true}).setDepth(52);
+          bz2.on('pointerover',()=>drawB2(true));
+          bz2.on('pointerout',()=>drawB2(false));
+          bz2.on('pointerdown',()=>{
+            this.cameras.main.fade(400,0,0,0);
+            this.time.delayedCall(400,()=>this.scene.restart());
+          });
+        });
+      });
+    });
+  }
+
+  update(){
+    if(this.won) return;
+    const SPEED=165; let vx=0, vy=0;
+    if(this.cursors.left.isDown  || this.wasd.left.isDown  || this.dpad.left)  vx=-SPEED;
+    else if(this.cursors.right.isDown || this.wasd.right.isDown || this.dpad.right) vx=SPEED;
+    if(this.cursors.up.isDown    || this.wasd.up.isDown    || this.dpad.up)    vy=-SPEED;
+    else if(this.cursors.down.isDown  || this.wasd.down.isDown  || this.dpad.down)  vy=SPEED;
+    if(vx!==0 && vy!==0){ vx*=0.707; vy*=0.707; }
+    this.bunny.setVelocity(vx,vy);
+    if(vx<0) this.bunny.setFlipX(true);
+    else if(vx>0) this.bunny.setFlipX(false);
+    const moving=vx!==0||vy!==0;
+    if(moving && !this.isMoving){
+      this.isMoving=true;
+      this.bobTween=this.tweens.add({targets:this.bunny, scaleX:1.15, scaleY:0.92, duration:165, yoyo:true, repeat:-1, ease:'Sine.easeInOut'});
+    } else if(!moving && this.isMoving){
+      this.isMoving=false;
+      if(this.bobTween) this.bobTween.stop();
+      this.tweens.add({targets:this.bunny, scaleX:1.1, scaleY:1.1, duration:100});
+    }
+    this.clouds.forEach(c=>{ c.x+=c.spd; if(c.x>W+70) c.x=-120; });
+    this._checkWin();
+  }
+}
+
+// ─── ZOMBIE SCENE (ACT 2) ────────────────────────────────────────────────────
+class ZombieScene extends Phaser.Scene {
+  constructor(){ super({key:'ZombieScene'}); }
+
+  create(){
+    this.hp=5; this.maxHp=5;
+    this.won=false; this.gameOver=false;
+    this.waveNum=0; this.zombiesAlive=0; this.killCount=0;
+    this.dpad={up:false,down:false,left:false,right:false};
+    this.isMoving=false; this.bobTween=null;
+    this.WAVES=[{count:4,speed:44},{count:7,speed:60},{count:10,speed:76}];
+
+    this._buildWorld();
+    this._buildPlayer();
+    this._buildUI();
+    this._buildDPad();
+
+    this.zombieGroup=this.physics.add.group();
+    this.bulletGroup=this.physics.add.group();
+
+    this.physics.add.overlap(this.bunny,this.zombieGroup,(b,z)=>this._onBunnyHit(b,z));
+    this.physics.add.overlap(this.bulletGroup,this.zombieGroup,(bl,z)=>this._onBulletHit(bl,z));
+
+    this.shootTimer={remove:()=>{}};
+    this.input.on('pointerdown',(ptr)=>{ if(!this.won&&!this.gameOver) this._fireAt(ptr.x,ptr.y); });
+
+    this.cursors=this.input.keyboard.createCursorKeys();
+    this.wasd=this.input.keyboard.addKeys({up:'W',down:'S',left:'A',right:'D'});
+
+    Music.playAct2();
+    this.cameras.main.fadeIn(700);
+
+    // Opening title card
+    this.time.delayedCall(400,()=>{
+      const tBg=this.add.graphics().setDepth(60);
+      tBg.fillStyle(0x000000,0.55); tBg.fillRect(0,H/2-44,W,88);
+      const tT=this.add.text(W/2,H/2-10,'🏡 Defend the Warren! 🧟',{
+        fontFamily:"'Baloo 2',sans-serif",fontSize:'38px',fontStyle:'bold',
+        color:'#ff6644',stroke:'#000000',strokeThickness:5
+      }).setOrigin(0.5).setDepth(61).setAlpha(0);
+      this.tweens.add({targets:[tT,tBg],alpha:1,duration:350,ease:'Power2',
+        onComplete:()=>this.time.delayedCall(1200,()=>{
+          this.tweens.add({targets:[tT,tBg],alpha:0,duration:400,
+            onComplete:()=>{ tT.destroy(); tBg.destroy(); this._startNextWave(); }
+          });
+        })
+      });
+    });
+  }
+
+  _buildWorld(){
+    // Night sky background
+    const bg=this.add.graphics().setDepth(-1);
+    bg.fillGradientStyle(0x07061a,0x07061a,0x0b180a,0x0b180a,1);
+    bg.fillRect(0,0,W,H);
+
+    // Dark grass tiles
+    for(let x=0;x<W;x+=64){
+      for(let y=0;y<H;y+=64){
+        const key=((x/64+y/64)%2===0)?'grass_a':'grass_b';
+        this.add.image(x+32,y+32,key).setDepth(0).setTint(0x283c1e);
+      }
+    }
+
+    // Eerie flowers (dark tinted)
+    [[110,210],[170,390],[290,480],[440,370],[380,140],
+     [575,450],[670,350],[195,170],[148,305],[510,490],
+     [745,210],[715,470],[448,510],[255,125],[595,270],
+     [330,230],[488,160],[620,540],[75,420],[720,120]
+    ].forEach(([x,y])=>{
+      this.add.image(x,y,`fl_${Phaser.Math.Between(0,5)}`)
+        .setScale(Phaser.Math.FloatBetween(0.85,1.4)).setDepth(2).setTint(0x2a3822);
+    });
+
+    // Dark drifting clouds
+    this.clouds=[];
+    for(let i=0;i<4;i++){
+      const c=this.add.image(Phaser.Math.Between(0,W),Phaser.Math.Between(20,130),'cloud')
+        .setAlpha(0.38).setScale(Phaser.Math.FloatBetween(0.9,1.6)).setDepth(3).setTint(0x221133);
+      c.spd=Phaser.Math.FloatBetween(0.08,0.22);
+      this.clouds.push(c);
+    }
+
+    // House – what we're defending, orange warning glow
+    const hg=this.add.image(695,130,'glow').setScale(4.5).setDepth(4).setTint(0xff5500).setAlpha(0.65);
+    this.tweens.add({targets:hg,scaleX:5.5,scaleY:5.5,alpha:0.25,duration:1200,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+    this.add.image(695,112,'house').setDepth(5);
+
+    // Dark trees (silhouette)
+    this.trees=this.physics.add.staticGroup();
+    [[200,160],[370,215],[155,335],[505,295],[305,430],
+     [445,135],[605,415],[710,285],[575,520],[245,525]].forEach(([x,y])=>{
+      const t=this.trees.create(x,y,'tree').setDepth(6).setTint(0x111d10);
+      t.body.setSize(38,38); t.body.setOffset(11,6); t.refreshBody();
+    });
+
+    // Dark bushes
+    this.bushes=this.physics.add.staticGroup();
+    [[350,100],[175,250],[490,490],[640,480],[100,300]].forEach(([x,y])=>{
+      const b=this.bushes.create(x,y,'bush').setDepth(6).setTint(0x172414);
+      b.body.setSize(32,26); b.body.setOffset(6,8); b.refreshBody();
+    });
+  }
+
+  _buildPlayer(){
+    this.bunny=this.physics.add.sprite(W/2,H/2+50,'bunny').setScale(1.1).setDepth(10);
+    this.bunny.setCollideWorldBounds(true);
+    this.bunny.body.setSize(26,20); this.bunny.body.setOffset(9,28);
+    this.physics.add.collider(this.bunny,this.trees);
+    this.physics.add.collider(this.bunny,this.bushes);
+    this.invincible=false;
+  }
+
+  _buildUI(){
+    // HP hearts – top left
+    const hBg=this.add.graphics().setDepth(25);
+    hBg.fillStyle(0x000000,0.35); hBg.fillRoundedRect(8,8,160,44,10);
+    this.heartDisplay=this.add.text(16,30,'❤️❤️❤️❤️❤️',{
+      fontFamily:"'Baloo 2',sans-serif",fontSize:'22px'
+    }).setOrigin(0,0.5).setDepth(26);
+
+    // Wave label – top centre
+    this.waveText=this.add.text(W/2,14,'Wave 0 / 3',{
+      fontFamily:"'Baloo 2',sans-serif",fontSize:'20px',fontStyle:'bold',
+      color:'#ffdd66',stroke:'#000000',strokeThickness:4
+    }).setOrigin(0.5,0).setDepth(26);
+
+    // Kill counter – top right
+    const kBg=this.add.graphics().setDepth(25);
+    kBg.fillStyle(0x000000,0.35); kBg.fillRoundedRect(W-126,8,118,44,10);
+    this.killText=this.add.text(W-18,30,'0 🧟',{
+      fontFamily:"'Baloo 2',sans-serif",fontSize:'22px',fontStyle:'bold',
+      color:'#88ff88',stroke:'#002200',strokeThickness:4
+    }).setOrigin(1,0.5).setDepth(26);
+
+    // Shoot hint
+    const sh=this.add.text(W/2,H-18,'Tap / click to shoot  •  Arrow keys or D-pad to move',{
+      fontFamily:"'Baloo 2',sans-serif",fontSize:'13px',
+      color:'#aaddaa',stroke:'#001100',strokeThickness:3
+    }).setOrigin(0.5,1).setDepth(25);
+    this.tweens.add({targets:sh,alpha:0,delay:5000,duration:1800});
+  }
+
+  _buildDPad(){
+    const cx=80, cy=H-105, step=62;
+    [['up',cx,cy-step],['down',cx,cy+step],['left',cx-step,cy],['right',cx+step,cy]].forEach(([dir,x,y])=>{
+      const btn=this.add.image(x,y,`btn_${dir}`).setDepth(30).setAlpha(0.6).setInteractive({useHandCursor:false});
+      btn.on('pointerdown',()=>{ this.dpad[dir]=true; this.tweens.add({targets:btn,alpha:1,duration:60}); });
+      btn.on('pointerup',()=>{ this.dpad[dir]=false; this.tweens.add({targets:btn,alpha:0.6,duration:80}); });
+      btn.on('pointerout',()=>{ this.dpad[dir]=false; this.tweens.add({targets:btn,alpha:0.6,duration:80}); });
+    });
+  }
+
+  _startNextWave(){
+    this.waveNum++;
+    if(this.waveNum>this.WAVES.length){ this._showVictory(); return; }
+    this.waveText.setText(`Wave ${this.waveNum} / ${this.WAVES.length}`);
+
+    const wColors=[0x88ff55,0xffaa22,0xff4433];
+    const wBg=this.add.graphics().setDepth(59);
+    wBg.fillStyle(0x000000,0.5); wBg.fillRect(0,H/2-40,W,80);
+    const wT=this.add.text(W/2,H/2,`🧟  WAVE ${this.waveNum}  🧟`,{
+      fontFamily:"'Baloo 2',sans-serif",fontSize:'46px',fontStyle:'bold',
+      color:'#'+wColors[this.waveNum-1].toString(16).padStart(6,'0'),
+      stroke:'#000000',strokeThickness:6
+    }).setOrigin(0.5).setDepth(60).setAlpha(0);
+    this.tweens.add({targets:[wT,wBg],alpha:1,duration:300,ease:'Power2',
+      onComplete:()=>this.time.delayedCall(1000,()=>{
+        this.tweens.add({targets:[wT,wBg],alpha:0,duration:350,
+          onComplete:()=>{ wT.destroy(); wBg.destroy(); this._spawnWave(); }
+        });
+      })
+    });
+  }
+
+  _spawnWave(){
+    const wave=this.WAVES[this.waveNum-1];
+    this.zombiesAlive=wave.count;
+    for(let i=0;i<wave.count;i++){
+      this.time.delayedCall(i*650,()=>this._spawnZombie(wave.speed));
+    }
+  }
+
+  _spawnZombie(speed){
+    const edge=Phaser.Math.Between(0,3);
+    let x,y;
+    if(edge===0){ x=Phaser.Math.Between(20,W-20); y=-50; }
+    else if(edge===1){ x=W+50; y=Phaser.Math.Between(20,H-20); }
+    else if(edge===2){ x=Phaser.Math.Between(20,W-20); y=H+50; }
+    else { x=-50; y=Phaser.Math.Between(20,H-20); }
+
+    const z=this.zombieGroup.create(x,y,'zombie').setDepth(9).setScale(1.05);
+    z.setCollideWorldBounds(false);
+    z.speed=speed+Phaser.Math.Between(-10,10);
+    z.body.setSize(28,30); z.body.setOffset(8,22);
+    this.tweens.add({targets:z,angle:9,duration:380+Phaser.Math.Between(0,180),yoyo:true,repeat:-1});
+  }
+
+  _fireAt(tx,ty){
+    if(this.won||this.gameOver) return;
+    const b=this.bulletGroup.create(this.bunny.x,this.bunny.y,'bullet').setDepth(11);
+    const angle=Math.atan2(ty-this.bunny.y,tx-this.bunny.x);
+    b.setVelocity(Math.cos(angle)*400,Math.sin(angle)*400);
+    b.body.setSize(10,10); b.body.setOffset(2,2);
+  }
+
+  _onBulletHit(bullet,zombie){
+    if(!bullet.active||!zombie.active) return;
+    bullet.destroy();
+    zombie.setActive(false).setVisible(false);
+    if(zombie.body) zombie.body.enable=false;
+    playZombieDie();
+    this.killCount++;
+    this.killText.setText(`${this.killCount} 🧟`);
+    this.tweens.add({targets:this.killText,scaleX:1.3,scaleY:1.3,duration:100,yoyo:true});
+    // death spin ghost
+    const ghost=this.add.image(zombie.x,zombie.y,'zombie').setDepth(9).setScale(1.05);
+    this.tweens.add({targets:ghost,alpha:0,scaleX:1.9,scaleY:1.9,angle:Phaser.Math.Between(120,240),
+      duration:480,onComplete:()=>{ ghost.destroy(); zombie.destroy(); this.zombiesAlive--; this._checkWaveEnd(); }
+    });
+  }
+
+  _onBunnyHit(bunny,zombie){
+    if(this.invincible||this.won||this.gameOver||!zombie.active) return;
+    this.invincible=true;
+    this.hp=Math.max(0,this.hp-1);
+    this._updateHearts();
+    playBunnyHit();
+    bunny.setTint(0xff3333);
+    this.time.delayedCall(160,()=>bunny.clearTint());
+    const blk=this.tweens.add({targets:bunny,alpha:0.35,duration:140,yoyo:true,repeat:4});
+    this.time.delayedCall(1600,()=>{ this.invincible=false; blk.stop(); bunny.setAlpha(1); });
+    if(this.hp<=0) this._showGameOver();
+  }
+
+  _updateHearts(){
+    this.heartDisplay.setText('❤️'.repeat(this.hp)+'🖤'.repeat(this.maxHp-this.hp));
+  }
+
+  _checkWaveEnd(){
+    if(this.zombiesAlive>0) return;
+    if(this.waveNum>=this.WAVES.length){
+      this.time.delayedCall(700,()=>this._showVictory());
+    } else {
+      this.time.delayedCall(1600,()=>this._startNextWave());
+    }
+  }
+
+  _showGameOver(){
+    this.gameOver=true;
+    this.bunny.setVelocity(0,0);
+    this.physics.pause();
+    this.shootTimer.remove();
+    Music.stop();
+    this.tweens.add({targets:this.bunny,angle:180,alpha:0,duration:600});
+    this.time.delayedCall(900,()=>{
+      const ov=this.add.graphics().setDepth(48);
+      ov.fillStyle(0x000000,0.65); ov.fillRect(0,0,W,H);
+      const px=W/2-200, py=H/2-115;
+      const panel=this.add.graphics().setDepth(50);
+      panel.fillStyle(0x1a0808,1); panel.fillRoundedRect(px,py,400,230,20);
+      panel.lineStyle(3,0xcc2222); panel.strokeRoundedRect(px,py,400,230,20);
+      panel.setScale(0.2).setAlpha(0);
+      this.tweens.add({targets:panel,scaleX:1,scaleY:1,alpha:1,duration:360,ease:'Back.easeOut'});
+      const ts={fontFamily:"'Baloo 2',sans-serif"};
+      [
+        this.add.text(W/2,py+65,'💀  Game Over',{...ts,fontSize:'42px',fontStyle:'bold',color:'#ff4444',stroke:'#000000',strokeThickness:5}),
+        this.add.text(W/2,py+118,`${this.killCount} zombies vanquished 🧟`,{...ts,fontSize:'20px',color:'#ffaaaa'}),
+      ].forEach((t,i)=>{ t.setOrigin(0.5).setDepth(51).setAlpha(0); this.time.delayedCall(i*160,()=>this.tweens.add({targets:t,alpha:1,duration:300})); });
+      this.time.delayedCall(500,()=>{
+        const bx=W/2-115,by=py+160;
+        const bg2=this.add.graphics().setDepth(51);
+        const drawB=(ov2)=>{ bg2.clear(); bg2.fillStyle(ov2?0xdd4422:0xaa2200); bg2.fillRoundedRect(bx,by,230,56,14); bg2.lineStyle(3,0xff6644); bg2.strokeRoundedRect(bx,by,230,56,14); };
+        drawB(false);
+        this.add.text(W/2,by+28,'💀  Try Again',{...ts,fontSize:'24px',fontStyle:'bold',color:'#fff',stroke:'#440000',strokeThickness:4}).setOrigin(0.5).setDepth(52);
+        const bz=this.add.zone(W/2,by+28,230,56).setInteractive({useHandCursor:true}).setDepth(52);
+        bz.on('pointerover',()=>drawB(true)); bz.on('pointerout',()=>drawB(false));
+        bz.on('pointerdown',()=>{ this.cameras.main.fade(400,0,0,0); this.time.delayedCall(400,()=>this.scene.restart()); });
+      });
+    });
+  }
+
+  _showVictory(){
+    this.won=true;
+    this.bunny.setVelocity(0,0);
+    this.physics.pause();
+    this.shootTimer.remove();
+
+    playVictory();
+    Music.stop();
+    this.time.delayedCall(1400,()=>Music.playAct1());
+
+    // Sun burst
+    const flash=this.add.graphics().setDepth(90).setAlpha(0);
+    flash.fillStyle(0xfffce0,1); flash.fillRect(0,0,W,H);
+    this.tweens.add({targets:flash,alpha:1,duration:380,ease:'Power2',
+      onComplete:()=>this.tweens.add({targets:flash,alpha:0.18,duration:1700,delay:100,
+        onComplete:()=>this._showVictoryPanel(flash)
+      })
+    });
+    // emoji burst
+    const em=['⭐','🌟','✨','🏡','🐰','💛','🌸'];
+    for(let i=0;i<28;i++){
+      this.time.delayedCall(i*50,()=>{
+        const ex=Phaser.Math.Between(60,740),ey=Phaser.Math.Between(60,540);
+        const e=this.add.text(ex,ey,em[Phaser.Math.Between(0,em.length-1)],{fontSize:`${Phaser.Math.Between(16,34)}px`}).setDepth(91).setAlpha(0);
+        this.tweens.add({targets:e,alpha:1,y:ey-60,duration:480,ease:'Back.easeOut',
+          onComplete:()=>this.tweens.add({targets:e,alpha:0,duration:360,delay:250,onComplete:()=>e.destroy()})
+        });
+      });
+    }
+  }
+
+  _showVictoryPanel(){
+    const px=W/2-230, py=H/2-165;
+    const panel=this.add.graphics().setDepth(100);
+    panel.fillStyle(0xfff8e8,1); panel.fillRoundedRect(px,py,460,330,24);
+    panel.lineStyle(4,0xd4a020,1); panel.strokeRoundedRect(px,py,460,330,24);
+    panel.lineStyle(2,0xffe077,0.5); panel.strokeRoundedRect(px+8,py+8,444,314,18);
+    panel.setScale(0.2).setAlpha(0);
+    this.tweens.add({targets:panel,scaleX:1,scaleY:1,alpha:1,duration:380,ease:'Back.easeOut'});
+    const ts={fontFamily:"'Baloo 2',sans-serif"};
+    const t1=this.add.text(W/2,py+65,'Warren Saved! 🏡',{...ts,fontSize:'44px',fontStyle:'bold',color:'#7a3a00',stroke:'#ffe099',strokeThickness:5}).setOrigin(0.5).setDepth(101).setAlpha(0);
+    const t2=this.add.text(W/2,py+120,'The zombies are defeated! 🐰✨',{...ts,fontSize:'21px',color:'#3a7018',stroke:'#eeffcc',strokeThickness:3}).setOrigin(0.5).setDepth(101).setAlpha(0);
+    const t3=this.add.text(W/2,py+158,`${this.killCount} zombies vanquished! 🧟💨`,{...ts,fontSize:'19px',color:'#8a4c1c'}).setOrigin(0.5).setDepth(101).setAlpha(0);
+    [t1,t2,t3].forEach((t,i)=>this.time.delayedCall(i*190,()=>this.tweens.add({targets:t,alpha:1,y:t.y-8,duration:360,ease:'Back.easeOut'})));
+    this.time.delayedCall(700,()=>{
+      const bx=W/2-115,by=py+198;
+      const bg2=this.add.graphics().setDepth(101);
+      const drawB=(ov2)=>{ bg2.clear(); bg2.fillStyle(ov2?0xff9944:0xff7830); bg2.fillRoundedRect(bx,by,230,60,15); bg2.lineStyle(3,0xffd055); bg2.strokeRoundedRect(bx,by,230,60,15); };
+      drawB(false);
+      this.add.text(W/2,by+30,'🐾  Play Again!',{...ts,fontSize:'26px',fontStyle:'bold',color:'#fff',stroke:'#7a2800',strokeThickness:4}).setOrigin(0.5).setDepth(102);
+      const bz=this.add.zone(W/2,by+30,230,60).setInteractive({useHandCursor:true}).setDepth(102);
+      bz.on('pointerover',()=>drawB(true)); bz.on('pointerout',()=>drawB(false));
+      bz.on('pointerdown',()=>{ Music.stop(); this.cameras.main.fade(400,0,0,0); this.time.delayedCall(400,()=>this.scene.start('TitleScene')); });
+    });
+  }
+
+  update(){
+    if(this.won||this.gameOver) return;
+    const SPEED=165; let vx=0,vy=0;
+    if(this.cursors.left.isDown ||this.wasd.left.isDown ||this.dpad.left)  vx=-SPEED;
+    else if(this.cursors.right.isDown||this.wasd.right.isDown||this.dpad.right) vx=SPEED;
+    if(this.cursors.up.isDown   ||this.wasd.up.isDown   ||this.dpad.up)    vy=-SPEED;
+    else if(this.cursors.down.isDown ||this.wasd.down.isDown ||this.dpad.down)  vy=SPEED;
+    if(vx!==0&&vy!==0){ vx*=0.707; vy*=0.707; }
+    this.bunny.setVelocity(vx,vy);
+    if(vx<0) this.bunny.setFlipX(true);
+    else if(vx>0) this.bunny.setFlipX(false);
+    const moving=vx!==0||vy!==0;
+    if(moving&&!this.isMoving){
+      this.isMoving=true;
+      this.bobTween=this.tweens.add({targets:this.bunny,scaleX:1.15,scaleY:0.92,duration:165,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+    } else if(!moving&&this.isMoving){
+      this.isMoving=false;
+      if(this.bobTween) this.bobTween.stop();
+      this.tweens.add({targets:this.bunny,scaleX:1.1,scaleY:1.1,duration:100});
+    }
+    // Zombie AI: shamble toward bunny
+    this.zombieGroup.getChildren().forEach(z=>{
+      if(!z.active) return;
+      const angle=Math.atan2(this.bunny.y-z.y,this.bunny.x-z.x);
+      z.setVelocity(Math.cos(angle)*z.speed,Math.sin(angle)*z.speed);
+      z.setFlipX(this.bunny.x<z.x);
+    });
+    // Clean up out-of-bounds bullets
+    this.bulletGroup.getChildren().forEach(b=>{
+      if(b.active&&(b.x<-60||b.x>W+60||b.y<-60||b.y>H+60)) b.destroy();
+    });
+    this.clouds.forEach(c=>{ c.x+=c.spd; if(c.x>W+70) c.x=-120; });
+  }
+}
+
+// ─── LAUNCH ─────────────────────────────────────────────────────────────────
+new Phaser.Game({
+  type: Phaser.AUTO,
+  width: W, height: H,
+  parent: 'game-container',
+  backgroundColor: '#7dcc6a',
+  physics: {
+    default: 'arcade',
+    arcade: { gravity:{y:0}, debug:false }
+  },
+  scene: [TitleScene, GameScene, ZombieScene],
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH
+  }
+});
+</script>
+</body>
+</html>
