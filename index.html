@@ -1055,7 +1055,7 @@ class ZombieScene extends Phaser.Scene {
       const bg2=this.add.graphics().setDepth(101);
       const drawB=(ov2)=>{ bg2.clear(); bg2.fillStyle(ov2?0xff9944:0xff7830); bg2.fillRoundedRect(bx,by,230,60,15); bg2.lineStyle(3,0xffd055); bg2.strokeRoundedRect(bx,by,230,60,15); };
       drawB(false);
-      this.add.text(W/2,by+30,'🐾  Play Again!',{...ts,fontSize:'26px',fontStyle:'bold',color:'#fff',stroke:'#7a2800',strokeThickness:4}).setOrigin(0.5).setDepth(102);
+      this.add.text(W/2,by+30,'Play Again',{...ts,fontSize:'26px',fontStyle:'bold',color:'#fff',stroke:'#7a2800',strokeThickness:4}).setOrigin(0.5).setDepth(102);
       const bz=this.add.zone(W/2,by+30,230,60).setInteractive({useHandCursor:true}).setDepth(102);
       bz.on('pointerover',()=>drawB(true)); bz.on('pointerout',()=>drawB(false));
       bz.on('pointerdown',()=>{ Music.stop(); this.cameras.main.fade(400,0,0,0); this.time.delayedCall(400,()=>this.scene.start('TitleScene')); });
