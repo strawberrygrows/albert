@@ -8,31 +8,20 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
     background: #1a3a0a;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    overflow: hidden;
-    touch-action: none;
+    display: flex; justify-content: center; align-items: center;
+    min-height: 100vh; overflow: hidden; touch-action: none;
   }
   canvas {
-    display: block;
-    touch-action: none;
-    -webkit-tap-highlight-color: transparent;
-    cursor: crosshair;
+    display: block; touch-action: none;
+    -webkit-tap-highlight-color: transparent; cursor: crosshair;
   }
 </style>
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
 <script>
-// ═══════════════════════════════════════════════════════════════
-//  GARDEN DEFENDER  –  single-file HTML5 Canvas game
-// ═══════════════════════════════════════════════════════════════
-
 const canvas = document.getElementById('gameCanvas');
 const ctx    = canvas.getContext('2d');
-
 const VW = 900, VH = 620;
 let scale = 1;
 
@@ -47,17 +36,16 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-// ─── AUDIO ──────────────────────────────────────────────────────
+// ── AUDIO ────────────────────────────────────────────────────────
 let audioCtx = null;
 function ensureAudio() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') audioCtx.resume();
 }
-
 function playBang() {
   if (!audioCtx) return;
   const ac = audioCtx, t = ac.currentTime;
-  const bufLen = ac.sampleRate * 0.18;
+  const bufLen = Math.floor(ac.sampleRate * 0.18);
   const buf = ac.createBuffer(1, bufLen, ac.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < bufLen; i++) d[i] = (Math.random()*2-1)*(1-i/bufLen);
@@ -70,35 +58,46 @@ function playBang() {
   og.gain.setValueAtTime(0.8,t); og.gain.exponentialRampToValueAtTime(0.001,t+0.14);
   o.connect(og); og.connect(ac.destination); o.start(t); o.stop(t+0.14);
 }
-
-function playUhhh() {
+function playUhhh(isDeer) {
   if (!audioCtx) return;
   const ac = audioCtx, t = ac.currentTime;
-  const freq = 220 + Math.random()*160;
+  // Deer: lower, slower, gruntier. Rabbit: high strangled squeak.
+  const freq = isDeer ? (90 + Math.random()*70) : (220 + Math.random()*160);
+  const dur  = isDeer ? 0.75 : 0.5;
   const o=ac.createOscillator(), g=ac.createGain();
   const lfo=ac.createOscillator(), lg=ac.createGain();
   o.type='sawtooth';
-  o.frequency.setValueAtTime(freq,t);
-  o.frequency.exponentialRampToValueAtTime(55,t+0.5);
-  lfo.frequency.value=18; lg.gain.value=28;
+  o.frequency.setValueAtTime(freq, t);
+  o.frequency.exponentialRampToValueAtTime(isDeer ? 28 : 55, t+dur);
+  lfo.frequency.value = isDeer ? 7 : 18;
+  lg.gain.value = isDeer ? 12 : 28;
   lfo.connect(lg); lg.connect(o.frequency);
-  g.gain.setValueAtTime(0.38,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.5);
+  g.gain.setValueAtTime(isDeer ? 0.25 : 0.38, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t+dur);
   o.connect(g); g.connect(ac.destination);
-  lfo.start(t); lfo.stop(t+0.5);
-  o.start(t); o.stop(t+0.5);
+  lfo.start(t); lfo.stop(t+dur);
+  o.start(t); o.stop(t+dur);
 }
-
 function playVictory() {
   if (!audioCtx) return;
-  [523,659,784,1047].forEach((f,i)=>{
-    const t=audioCtx.currentTime+i*0.18;
+  [523,659,784,1047,784,1047].forEach((f,i)=>{
+    const t=audioCtx.currentTime+i*0.16;
     const o=audioCtx.createOscillator(),g=audioCtx.createGain();
     o.type='triangle'; o.frequency.value=f;
-    g.gain.setValueAtTime(0.15,t); g.gain.linearRampToValueAtTime(0,t+0.4);
-    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+0.4);
+    g.gain.setValueAtTime(0.14,t); g.gain.linearRampToValueAtTime(0,t+0.35);
+    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+0.35);
   });
 }
-
+function playLevelUp() {
+  if (!audioCtx) return;
+  [523,659,784,659,784,1047].forEach((f,i)=>{
+    const t=audioCtx.currentTime+i*0.13;
+    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
+    o.type='triangle'; o.frequency.value=f;
+    g.gain.setValueAtTime(0.12,t); g.gain.linearRampToValueAtTime(0,t+0.28);
+    o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+0.28);
+  });
+}
 function playLose() {
   if (!audioCtx) return;
   [392,330,262,196].forEach((f,i)=>{
@@ -109,8 +108,7 @@ function playLose() {
     o.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t+0.4);
   });
 }
-
-// Jaunty music
+// Music
 let musicRunning=false, musicTimer=null, musicBeat=0, melIdx=0, nextBeatTime=0;
 const BPM=150, BEAT=60/BPM;
 const BASS_NOTES=[65,65,69,72,65,65,67,72];
@@ -150,39 +148,81 @@ function stopMusic(){
   if(musicTimer){clearInterval(musicTimer);musicTimer=null;}
 }
 
-// ─── CONSTANTS ───────────────────────────────────────────────────
-const MOVE_Y    = 528;   // below this = move zone
-const DEBBIE_Y  = 564;
-const FLOWER_Y  = 418;
-const WIN       = 30;
+// ── CONSTANTS ────────────────────────────────────────────────────
+const MOVE_Y   = 528;
+const DEBBIE_Y = 564;
+const FLOWER_Y = 418;
+const WIN = 30, WIN_L2 = 30;
 
-// ─── STATE ───────────────────────────────────────────────────────
-let phase = 'title'; // title | playing | win | lose
-let kills=0, debbieX=450, targetX=450;
+const FCOLS = ['#ff69b4','#ff8c00','#da70d6','#ff4500','#ffd700','#ff1493'];
+const FXS   = [80,195,310,590,705,820];
+const RTINTS = ['#f5f0e8','#f0ead8','#e8e0d0','#f8f4ec'];
+
+// UK native deer: Red, Roe, Fallow
+// speedBase + speedRand*random() per entity; scale affects drawing size and hit radius
+const DEER_TYPES = [
+  { name:'Red Deer',    bodyColor:'#9B4E1A', legColor:'#7a3a12', snoutColor:'#c06838', earInner:'#dda090', scale:1.08, speedBase:26, speedRand:16 },
+  { name:'Roe Deer',    bodyColor:'#C89828', legColor:'#a07818', snoutColor:'#daa838', earInner:'#f0c090', scale:0.72, speedBase:34, speedRand:22 },
+  { name:'Fallow Deer', bodyColor:'#D4AA6A', legColor:'#b08840', snoutColor:'#e0c080', earInner:'#f8e0c0', scale:0.88, speedBase:30, speedRand:20 },
+];
+
+// ── STATE ────────────────────────────────────────────────────────
+let phase='title', level=1, kills=0;
+let debbieX=450, targetX=450;
 let bullets=[], rabbits=[], flowers=[], particles=[];
 let spawnTimer=1.0, shootCooldown=0, muzzleFlash=0, shake=0, gameTime=0;
-
-const FCOLS=['#ff69b4','#ff8c00','#da70d6','#ff4500','#ffd700','#ff1493'];
-const FXS=[80,195,310,590,705,820];
-const RTINTS=['#f5f0e8','#f0ead8','#e8e0d0','#f8f4ec'];
+let lastT=0;
 
 function initFlowers(){
   flowers=FXS.map((x,i)=>({x,y:FLOWER_Y,color:FCOLS[i],alive:true,beingEaten:false,eatProg:0,wobble:0,sway:Math.random()*Math.PI*2}));
 }
 function resetGame(){
-  kills=0; debbieX=450; targetX=450;
+  level=1; kills=0; debbieX=450; targetX=450;
   bullets=[]; rabbits=[]; particles=[];
   spawnTimer=1.0; shootCooldown=0; muzzleFlash=0; shake=0; gameTime=0;
   initFlowers();
 }
+function startLevel2(){
+  level=2; kills=0;
+  rabbits=[]; bullets=[]; particles=[];
+  // Clean up any in-progress eating
+  for(const f of flowers){ f.beingEaten=false; f.eatProg=0; f.wobble=0; }
+  spawnTimer=1.0; shootCooldown=0; muzzleFlash=0; shake=0;
+  phase='playing';
+  startMusic();
+}
+
 function spawnRabbit(){
   rabbits.push({
+    isDeer:false,
     x:60+Math.random()*(VW-120), y:-50,
-    speed:55+Math.random()*55+kills*1.1,
+    speed:50+Math.random()*50+kills*1.0,   // ~10% slower than original
     tint:RTINTS[Math.floor(Math.random()*4)],
     earWig:0, hop:Math.random()*Math.PI*2, driftX:(Math.random()-.5)*45,
-    eating:false, flower:null, dead:false, deadT:0,
-    dvx:(Math.random()-.5)*220, dvy:-260-Math.random()*110, drot:0, drotS:(Math.random()-.5)*14
+    eating:false, flower:null,
+    dead:false, deadT:0,
+    dvx:(Math.random()-.5)*220, dvy:-260-Math.random()*110,
+    drot:0, drotS:(Math.random()-.5)*12,
+    hitRadius:28
+  });
+}
+function spawnDeer(){
+  const type = Math.floor(Math.random()*3);
+  const tp   = DEER_TYPES[type];
+  // Fixed spot positions for fallow deer (type 2)
+  const spots = type===2 ? [[-8,2],[2,6],[9,1],[-11,8],[10,7],[-3,10],[5,-3],[-6,-2]] : [];
+  rabbits.push({
+    isDeer:true, type,
+    x:65+Math.random()*(VW-130), y:-90,
+    speed:tp.speedBase+Math.random()*tp.speedRand+kills*0.5,
+    hop:Math.random()*Math.PI*2, driftX:(Math.random()-.5)*30,
+    earWig:0,
+    eating:false, flower:null,
+    dead:false, deadT:0,
+    dvx:(Math.random()-.5)*180, dvy:-220-Math.random()*90,
+    drot:0, drotS:(Math.random()-.5)*10,
+    hitRadius:Math.round(30*tp.scale),
+    spots
   });
 }
 function burst(x,y){
@@ -193,8 +233,7 @@ function burst(x,y){
   }
 }
 
-// ─── UPDATE ──────────────────────────────────────────────────────
-let lastT=0;
+// ── UPDATE ───────────────────────────────────────────────────────
 function update(dt){
   gameTime+=dt;
   muzzleFlash=Math.max(0,muzzleFlash-dt*10);
@@ -205,31 +244,39 @@ function update(dt){
 
   spawnTimer-=dt;
   if(spawnTimer<=0 && rabbits.filter(r=>!r.dead).length<11){
-    spawnRabbit();
-    spawnTimer=Math.max(0.45,1.6-kills*0.025)*(0.7+Math.random()*0.6);
+    if(level===1){
+      spawnRabbit();
+    } else {
+      // Level 2: ~50/50 rabbits and deer
+      Math.random()<0.5 ? spawnRabbit() : spawnDeer();
+    }
+    const base = level===1 ? Math.max(0.45,1.6-kills*0.025) : Math.max(0.38,1.4-kills*0.028);
+    spawnTimer = base*(0.7+Math.random()*0.6);
   }
 
   for(const r of rabbits){
     if(r.dead){r.deadT+=dt;r.x+=r.dvx*dt;r.y+=r.dvy*dt;r.dvy+=620*dt;r.drot+=r.drotS*dt;continue;}
-    r.earWig+=dt*3.5; r.hop+=dt*2.2;
+    r.earWig+=dt*3.5;
+    r.hop+=dt*(r.isDeer ? 1.4 : 2.2);
     if(!r.eating){
       r.y+=r.speed*dt;
       r.x+=Math.sin(r.hop*.5)*r.driftX*dt;
       r.x=Math.max(32,Math.min(VW-32,r.x));
-      if(r.y>=FLOWER_Y-42){
-        let best=null,bestD=95;
+      const trigY = FLOWER_Y - (r.isDeer ? 58 : 42);
+      if(r.y>=trigY){
+        let best=null, bestD=r.isDeer?115:95;
         for(const f of flowers){
           if(f.alive&&!f.beingEaten){const d=Math.abs(r.x-f.x);if(d<bestD){bestD=d;best=f;}}
         }
         if(best){r.flower=best;best.beingEaten=true;r.eating=true;}
-        else if(r.y>VH+80){r.dead=true;r.deadT=999;}
+        else if(r.y>VH+100){r.dead=true;r.deadT=999;}
       }
     } else {
       const dx=r.flower.x-r.x;
       if(Math.abs(dx)>3) r.x+=Math.sign(dx)*85*dt;
       r.y=FLOWER_Y-20;
       r.flower.wobble+=dt*22;
-      r.flower.eatProg+=dt/2.6;
+      r.flower.eatProg+=dt/(r.isDeer ? 2.0 : 2.6);  // deer eat faster — dangerous!
       if(r.flower.eatProg>=1){
         r.flower.alive=false; r.flower.beingEaten=false;
         r.eating=false; r.dead=true; r.deadT=999;
@@ -239,18 +286,26 @@ function update(dt){
   }
   rabbits=rabbits.filter(r=>!(r.dead&&r.deadT>0.75));
 
-  for(const b of bullets){b.y-=720*dt;if(!b.trail)b.trail=[];b.trail.push({x:b.x,y:b.y});if(b.trail.length>7)b.trail.shift();}
+  for(const b of bullets){
+    b.y-=720*dt;
+    if(!b.trail) b.trail=[];
+    b.trail.push({x:b.x,y:b.y});
+    if(b.trail.length>7) b.trail.shift();
+  }
   for(let bi=bullets.length-1;bi>=0;bi--){
     const b=bullets[bi];
     for(let ri=rabbits.length-1;ri>=0;ri--){
       const r=rabbits[ri];
       if(r.dead) continue;
-      if(Math.hypot(b.x-r.x,b.y-r.y)<28){
+      if(Math.hypot(b.x-r.x,b.y-r.y)<r.hitRadius){
         bullets.splice(bi,1);
         if(r.flower){r.flower.beingEaten=false;r.flower.eatProg=0;}
-        r.dead=true;r.deadT=0;
-        kills++;playUhhh();burst(r.x,r.y);
-        if(kills>=WIN){phase='win';stopMusic();playVictory();}
+        r.dead=true; r.deadT=0;
+        kills++;
+        playUhhh(r.isDeer);
+        burst(r.x,r.y);
+        if(level===1 && kills>=WIN)      {phase='levelup'; stopMusic(); playLevelUp();}
+        else if(level===2 && kills>=WIN_L2){phase='win';     stopMusic(); playVictory();}
         break;
       }
     }
@@ -262,7 +317,7 @@ function update(dt){
   for(const f of flowers) if(f.alive) f.sway+=dt;
 }
 
-// ─── DRAW HELPERS ────────────────────────────────────────────────
+// ── DRAW HELPERS ─────────────────────────────────────────────────
 function rr(x,y,w,h,r){
   ctx.beginPath();
   ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
@@ -272,48 +327,36 @@ function rr(x,y,w,h,r){
   ctx.closePath();
 }
 
-// ─── BACKGROUND ──────────────────────────────────────────────────
+// ── BACKGROUND ───────────────────────────────────────────────────
 function drawBG(){
   const sg=ctx.createLinearGradient(0,0,0,VH*.62);
   sg.addColorStop(0,'#a8d4f8');sg.addColorStop(1,'#d4eeff');
   ctx.fillStyle=sg;ctx.fillRect(0,0,VW,VH*.62);
-
-  // Sun
   ctx.shadowColor='#ffd700';ctx.shadowBlur=28;
   ctx.fillStyle='#ffe055';ctx.beginPath();ctx.arc(820,65,30,0,Math.PI*2);ctx.fill();
   ctx.shadowBlur=0;
-
-  // Clouds
   [[90,52,1],[280,34,0.88],[490,58,1.1],[710,36,0.9]].forEach(([cx,cy,s])=>{
     ctx.save();ctx.translate(cx,cy);ctx.scale(s,s);
     ctx.fillStyle='rgba(255,255,255,0.92)';
     [[0,0,22],[28,0,28],[54,0,22],[15,12,20],[40,12,20]].forEach(([ex,ey,er])=>{ctx.beginPath();ctx.arc(ex,ey,er,0,Math.PI*2);ctx.fill();});
     ctx.restore();
   });
-
-  // Grass
   const gg=ctx.createLinearGradient(0,VH*.58,0,VH*.9);
   gg.addColorStop(0,'#76c83e');gg.addColorStop(1,'#489a1e');
   ctx.fillStyle=gg;ctx.fillRect(0,VH*.58,VW,VH*.42);
   ctx.fillStyle='#8cdc52';ctx.fillRect(0,VH*.58,VW,7);
-
-  // Grass tufts
   ctx.strokeStyle='#58aa26';ctx.lineWidth=1.5;ctx.lineCap='round';
   for(let gx=8;gx<VW;gx+=20){
     const gy=VH*.58+5;
     ctx.beginPath();ctx.moveTo(gx,gy+3);ctx.quadraticCurveTo(gx-3,gy-5,gx-1,gy-9);ctx.stroke();
     ctx.beginPath();ctx.moveTo(gx+7,gy+3);ctx.quadraticCurveTo(gx+10,gy-4,gx+8,gy-8);ctx.stroke();
   }
-
-  // Dirt path
   const dg=ctx.createLinearGradient(0,MOVE_Y,0,VH);
   dg.addColorStop(0,'#c09050');dg.addColorStop(1,'#9e6830');
   ctx.fillStyle=dg;ctx.fillRect(0,MOVE_Y,VW,VH-MOVE_Y);
   ctx.fillStyle='#d4a860';ctx.fillRect(0,MOVE_Y,VW,4);
   ctx.fillStyle='rgba(155,115,60,0.45)';
   [[75,548],[225,562],[410,545],[610,568],[775,552]].forEach(([px,py])=>{ctx.beginPath();ctx.ellipse(px,py,7,4,0,0,Math.PI*2);ctx.fill();});
-
-  // Fence
   ctx.strokeStyle='#e8d098';ctx.lineWidth=2.8;
   ctx.beginPath();ctx.moveTo(0,MOVE_Y-2);ctx.lineTo(VW,MOVE_Y-2);ctx.stroke();
   ctx.lineWidth=1.5;
@@ -324,6 +367,7 @@ function drawBG(){
   }
 }
 
+// ── FLOWERS ──────────────────────────────────────────────────────
 function drawFlower(f){
   if(!f.alive) return;
   const wa=f.beingEaten?Math.sin(f.wobble)*0.22:Math.sin(f.sway*.8)*.04;
@@ -344,19 +388,18 @@ function drawFlower(f){
   ctx.restore();
 }
 
+// ── RABBIT ───────────────────────────────────────────────────────
 function drawRabbit(r){
   ctx.save();
   if(r.dead){
     ctx.translate(r.x,r.y);ctx.rotate(r.drot);
     ctx.globalAlpha=Math.max(0,1-r.deadT*1.8);
   } else {
-    const hop=Math.abs(Math.sin(r.hop))*4;
-    ctx.translate(r.x,r.y-hop);
+    ctx.translate(r.x,r.y-Math.abs(Math.sin(r.hop))*4);
   }
   ctx.scale(.9,.9);
   const tc=r.tint;
   ctx.fillStyle='rgba(0,0,0,0.07)';ctx.beginPath();ctx.ellipse(0,24,18,5,0,0,Math.PI*2);ctx.fill();
-  // Ears
   const ew=Math.sin(r.earWig)*2.5;
   [[-7,-25],[7,-25]].forEach(([ex,ey],idx)=>{
     const s=idx===0?-1:1;
@@ -385,32 +428,136 @@ function drawRabbit(r){
   ctx.globalAlpha=1;ctx.restore();
 }
 
+// ── DEER ─────────────────────────────────────────────────────────
+function drawDeer(r){
+  const tp = DEER_TYPES[r.type];
+  ctx.save();
+  if(r.dead){
+    ctx.translate(r.x,r.y);ctx.rotate(r.drot);
+    ctx.globalAlpha=Math.max(0,1-r.deadT*1.8);
+  } else {
+    ctx.translate(r.x, r.y - Math.abs(Math.sin(r.hop))*3*.6);
+  }
+  ctx.scale(tp.scale, tp.scale);
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.07)';ctx.beginPath();ctx.ellipse(0,34,21,5,0,0,Math.PI*2);ctx.fill();
+
+  // Legs (4 visible from front)
+  ctx.strokeStyle=tp.legColor;ctx.lineWidth=4;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(-11,13);ctx.lineTo(-13,33);ctx.stroke(); // back-left
+  ctx.beginPath();ctx.moveTo(-4, 15);ctx.lineTo(-4, 33);ctx.stroke(); // back-right
+  ctx.beginPath();ctx.moveTo( 4, 15);ctx.lineTo( 4, 33);ctx.stroke(); // front-left
+  ctx.beginPath();ctx.moveTo(11, 13);ctx.lineTo(13, 33);ctx.stroke(); // front-right
+  // Hooves
+  ctx.fillStyle='#1a1008';
+  [-13,-4,4,13].forEach(lx=>{ctx.beginPath();ctx.ellipse(lx,34.5,3.5,2.5,0,0,Math.PI*2);ctx.fill();});
+
+  // Body
+  ctx.fillStyle=tp.bodyColor;ctx.strokeStyle=tp.legColor;ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.ellipse(0,6,21,14,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+  // Fallow deer spots
+  if(r.type===2){
+    ctx.fillStyle='rgba(255,250,218,0.65)';
+    r.spots.forEach(([sx,sy])=>{ctx.beginPath();ctx.ellipse(sx,sy,3.2,2.2,0.3,0,Math.PI*2);ctx.fill();});
+  }
+
+  // Rump patch
+  ctx.fillStyle = r.type===0 ? '#e0c090' : 'rgba(255,255,240,0.82)';
+  ctx.beginPath();ctx.ellipse(0,17,7,9,0,0,Math.PI*2);ctx.fill();
+
+  // Neck
+  ctx.fillStyle=tp.bodyColor;ctx.strokeStyle=tp.legColor;ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(-6,-4);ctx.lineTo(-5,-22);ctx.lineTo(5,-22);ctx.lineTo(6,-4);ctx.closePath();ctx.fill();ctx.stroke();
+
+  // Head
+  ctx.fillStyle=tp.bodyColor;ctx.strokeStyle=tp.legColor;ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.ellipse(0,-30,12,11,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+
+  // Muzzle (elongated downward)
+  ctx.fillStyle=tp.snoutColor;
+  ctx.beginPath();ctx.ellipse(0,-23,7.5,7,0,0,Math.PI*2);ctx.fill();
+  // Nostrils
+  ctx.fillStyle='#2a1608';
+  ctx.beginPath();ctx.ellipse(-2.5,-22,1.8,1.2,0,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.ellipse(2.5,-22,1.8,1.2,0,0,Math.PI*2);ctx.fill();
+
+  // Eyes
+  ctx.fillStyle='#2a1608';
+  ctx.beginPath();ctx.arc(-7,-32,3.2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc( 7,-32,3.2,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,0.85)';
+  ctx.beginPath();ctx.arc(-6,-33,1.3,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc( 8,-33,1.3,0,Math.PI*2);ctx.fill();
+
+  // Ears (large, deer-style)
+  [[-13,-32,-0.28],[13,-32,0.28]].forEach(([ex,ey,rot])=>{
+    ctx.save();ctx.translate(ex,ey);ctx.rotate(rot);
+    ctx.fillStyle=tp.bodyColor;ctx.strokeStyle=tp.legColor;ctx.lineWidth=1;
+    ctx.beginPath();ctx.ellipse(0,-9,6.5,12,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+    ctx.fillStyle=tp.earInner;ctx.beginPath();ctx.ellipse(0,-9,3.8,8,0,0,Math.PI*2);ctx.fill();
+    ctx.restore();
+  });
+
+  // ── ANTLERS ──
+  ctx.strokeStyle='#5a3010';ctx.lineCap='round';ctx.lineJoin='round';
+  if(r.type===0){
+    // Red deer — large branching antlers
+    ctx.lineWidth=2.5;
+    [[-1,1]].forEach(s=>{
+      ctx.beginPath();ctx.moveTo(s*5,-39);ctx.lineTo(s*8,-56);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(s*7,-48);ctx.lineTo(s*14,-52);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(s*7,-53);ctx.lineTo(s*5,-62);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(s*6,-57);ctx.lineTo(s*11,-62);ctx.stroke();
+    });
+  } else if(r.type===1){
+    // Roe deer — short simple spikes
+    ctx.lineWidth=2;
+    [[-1,1]].forEach(s=>{
+      ctx.beginPath();ctx.moveTo(s*4,-39);ctx.lineTo(s*5,-51);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(s*5,-47);ctx.lineTo(s*9,-51);ctx.stroke();
+    });
+  } else {
+    // Fallow deer — broad palmate antlers
+    ctx.fillStyle='#5a3010';ctx.lineWidth=1;
+    [[-1,1]].forEach(s=>{
+      ctx.beginPath();
+      ctx.moveTo(s*5,-38);ctx.lineTo(s*6,-48);
+      ctx.lineTo(s*15,-51);ctx.lineTo(s*13,-57);ctx.lineTo(s*8,-55);
+      ctx.lineTo(s*7,-60);ctx.lineTo(s*4,-57);ctx.lineTo(s*5,-48);
+      ctx.closePath();ctx.fill();ctx.stroke();
+    });
+  }
+
+  ctx.globalAlpha=1;ctx.restore();
+}
+
+function drawEntity(r){
+  if(r.isDeer) drawDeer(r); else drawRabbit(r);
+}
+
+// ── DEBBIE ───────────────────────────────────────────────────────
 function drawDebbie(){
   const x=debbieX, y=DEBBIE_Y;
   ctx.save();ctx.translate(x,y);
   ctx.fillStyle='rgba(0,0,0,0.11)';ctx.beginPath();ctx.ellipse(2,40,22,6,0,0,Math.PI*2);ctx.fill();
-  // Boots
   ctx.fillStyle='#382610';ctx.strokeStyle='#281808';ctx.lineWidth=1;
   ctx.beginPath();ctx.ellipse(-10,41,11,5.5,0,0,Math.PI*2);ctx.fill();ctx.stroke();
   ctx.beginPath();ctx.ellipse(10,41,11,5.5,0,0,Math.PI*2);ctx.fill();ctx.stroke();
   ctx.fillStyle='#483820';ctx.beginPath();ctx.ellipse(-8,39,8,4,0,0,Math.PI*2);ctx.fill();
   ctx.beginPath();ctx.ellipse(12,39,8,4,0,0,Math.PI*2);ctx.fill();
-  // Legs
   ctx.strokeStyle='#4860cc';ctx.lineWidth=8;ctx.lineCap='round';
   ctx.beginPath();ctx.moveTo(-8,15);ctx.lineTo(-10,40);ctx.stroke();
   ctx.beginPath();ctx.moveTo(8,15);ctx.lineTo(10,40);ctx.stroke();
-  // Body
   ctx.fillStyle='#5ab840';ctx.strokeStyle='#389820';ctx.lineWidth=1.5;
   ctx.beginPath();rr(-17,-16,34,33,6);ctx.fill();ctx.stroke();
   ctx.strokeStyle='rgba(38,100,18,.28)';ctx.lineWidth=1;
   for(let jy=-10;jy<=14;jy+=6){ctx.beginPath();ctx.moveTo(-14,jy);ctx.lineTo(14,jy);ctx.stroke();}
-  // Left arm
   ctx.strokeStyle='#f0a870';ctx.lineWidth=8;ctx.lineCap='round';
   ctx.beginPath();ctx.moveTo(-17,-5);ctx.lineTo(-26,18);ctx.stroke();
   ctx.fillStyle='#f0a870';ctx.beginPath();ctx.ellipse(-27,20,6,4,-.3,0,Math.PI*2);ctx.fill();
-  // Right arm
   ctx.beginPath();ctx.moveTo(17,-5);ctx.lineTo(26,-22);ctx.stroke();
-  // Gun
   ctx.save();ctx.translate(27,-23);
   ctx.strokeStyle='#6a3c18';ctx.lineWidth=7;ctx.lineCap='round';
   ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(0,-44);ctx.stroke();
@@ -435,15 +582,11 @@ function drawDebbie(){
     ctx.restore();
   }
   ctx.restore();
-  // Right hand
   ctx.fillStyle='#f0a870';ctx.strokeStyle='#d09050';ctx.lineWidth=1;
   ctx.beginPath();ctx.ellipse(27,-25,5.5,4,.3,0,Math.PI*2);ctx.fill();ctx.stroke();
-  // Neck
   ctx.fillStyle='#f5b890';ctx.beginPath();rr(-5,-20,10,6,3);ctx.fill();
-  // Head
   ctx.fillStyle='#f5b890';ctx.strokeStyle='#e09070';ctx.lineWidth=1.5;
   ctx.beginPath();ctx.ellipse(0,-34,19,21,0,0,Math.PI*2);ctx.fill();ctx.stroke();
-  // Hair back
   ctx.fillStyle='#5a3010';ctx.beginPath();ctx.arc(0,-38,18,Math.PI+.1,-0.1);ctx.fill();
   ctx.beginPath();ctx.ellipse(-16,-33,6,13,-.2,0,Math.PI*2);ctx.fill();
   ctx.beginPath();ctx.ellipse(16,-33,6,13,.2,0,Math.PI*2);ctx.fill();
@@ -451,21 +594,17 @@ function drawDebbie(){
   ctx.fillStyle='#5a3010';ctx.beginPath();ctx.ellipse(-4,-52,8,5,.3,0,Math.PI*2);ctx.fill();
   ctx.beginPath();ctx.ellipse(5,-52,8,5,-.25,0,Math.PI*2);ctx.fill();
   ctx.strokeStyle='#8a5a38';ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(-2,-47,9,Math.PI+.4,-.3);ctx.stroke();
-  // Ears
   ctx.fillStyle='#f0a878';ctx.strokeStyle='#d09060';ctx.lineWidth=1;
   ctx.beginPath();ctx.ellipse(-18,-36,5,7,.15,0,Math.PI*2);ctx.fill();ctx.stroke();
   ctx.beginPath();ctx.ellipse(18,-36,5,7,-.15,0,Math.PI*2);ctx.fill();ctx.stroke();
-  // Eyes
   ctx.fillStyle='#2a1a08';ctx.beginPath();ctx.arc(-7,-36,3,0,Math.PI*2);ctx.arc(7,-36,3,0,Math.PI*2);ctx.fill();
   ctx.fillStyle='rgba(255,255,255,.92)';ctx.beginPath();ctx.arc(-6,-37,1.3,0,Math.PI*2);ctx.arc(8,-37,1.3,0,Math.PI*2);ctx.fill();
-  // Glasses
   ctx.strokeStyle='#1a1008';ctx.lineWidth=2.2;
   ctx.beginPath();rr(-16,-41,12,10,3);ctx.stroke();
   ctx.beginPath();rr(4,-41,12,10,3);ctx.stroke();
   ctx.lineWidth=1.8;ctx.beginPath();ctx.moveTo(-4,-36);ctx.lineTo(4,-36);ctx.stroke();
   ctx.beginPath();ctx.moveTo(-16,-36);ctx.lineTo(-22,-34);ctx.stroke();
   ctx.beginPath();ctx.moveTo(16,-36);ctx.lineTo(22,-34);ctx.stroke();
-  // Nose & mouth
   ctx.fillStyle='#e09060';ctx.beginPath();ctx.ellipse(1,-29,3,2,0,0,Math.PI*2);ctx.fill();
   ctx.strokeStyle='#b06040';ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(0,-25,7,.2,Math.PI-.2);ctx.stroke();
   ctx.restore();
@@ -482,7 +621,6 @@ function drawBullets(){
     ctx.fillStyle='rgba(255,240,100,.35)';ctx.beginPath();ctx.ellipse(b.x,b.y,6,13,0,0,Math.PI*2);ctx.fill();
   }
 }
-
 function drawParticles(){
   for(const p of particles){
     ctx.globalAlpha=p.life;ctx.fillStyle=p.color;
@@ -495,28 +633,43 @@ function drawParticles(){
   ctx.globalAlpha=1;
 }
 
+// ── HUD ──────────────────────────────────────────────────────────
 function drawHUD(){
+  const winTarget = level===1 ? WIN : WIN_L2;
   ctx.fillStyle='rgba(255,248,232,.9)';ctx.strokeStyle='#c89040';ctx.lineWidth=2;
-  ctx.beginPath();rr(14,14,204,72,12);ctx.fill();ctx.stroke();
-  ctx.fillStyle='#7a3808';ctx.font='bold 13px Georgia,serif';ctx.textBaseline='middle';
-  ctx.fillText('🐰 Rabbits defeated:',25,31);
-  ctx.fillStyle='#2a7a10';ctx.font='bold 28px Georgia,serif';ctx.fillText(kills,25,59);
-  ctx.fillStyle='rgba(80,40,10,.5)';ctx.font='18px Georgia,serif';ctx.fillText('/ '+WIN,kills>=10?55:44,59);
-  ctx.fillStyle='rgba(0,0,0,.1)';ctx.beginPath();rr(14,89,204,10,5);ctx.fill();
-  if(kills>0){const pg=ctx.createLinearGradient(14,0,218,0);pg.addColorStop(0,'#78cc48');pg.addColorStop(1,'#f8c820');ctx.fillStyle=pg;ctx.beginPath();rr(14,89,204*(kills/WIN),10,5);ctx.fill();}
+  ctx.beginPath();rr(14,14,204,84,12);ctx.fill();ctx.stroke();
+  ctx.textBaseline='middle';
+  // Level label
+  const lvlLabel = level===1 ? '🌸 Level 1' : '🦌 Level 2';
+  ctx.fillStyle='#9a4808';ctx.font='bold 12px Georgia,serif';ctx.fillText(lvlLabel,25,26);
+  // Kill label
+  const killLabel = level===1 ? '🐰 Rabbits:' : '🏆 Defeated:';
+  ctx.fillStyle='#7a3808';ctx.font='bold 13px Georgia,serif';ctx.fillText(killLabel,25,42);
+  ctx.fillStyle='#2a7a10';ctx.font='bold 28px Georgia,serif';ctx.fillText(kills,25,66);
+  ctx.fillStyle='rgba(80,40,10,.5)';ctx.font='18px Georgia,serif';ctx.fillText('/ '+winTarget,kills>=10?55:44,66);
+  // Progress bar
+  ctx.fillStyle='rgba(0,0,0,.1)';ctx.beginPath();rr(14,78,204,10,5);ctx.fill();
+  if(kills>0){
+    const pg=ctx.createLinearGradient(14,0,218,0);
+    pg.addColorStop(0, level===1?'#78cc48':'#4888cc');
+    pg.addColorStop(1, level===1?'#f8c820':'#c840f0');
+    ctx.fillStyle=pg;ctx.beginPath();rr(14,78,204*(kills/winTarget),10,5);ctx.fill();
+  }
+  // Flowers panel
   ctx.fillStyle='rgba(255,248,232,.9)';ctx.strokeStyle='#c89040';ctx.lineWidth=2;
   ctx.beginPath();rr(VW-176,14,162,52,12);ctx.fill();ctx.stroke();
   ctx.fillStyle='#7a3808';ctx.font='bold 13px Georgia,serif';ctx.fillText('🌸 Flowers left:',VW-165,28);
   const al=flowers.filter(f=>f.alive).length;
-  ctx.fillStyle=al>2?'#2a8a10':'#cc2010';ctx.font='bold 17px Georgia,serif';ctx.fillText(al+' / '+flowers.length,VW-165,49);
+  ctx.fillStyle=al>2?'#2a8a10':'#cc2010';ctx.font='bold 17px Georgia,serif';ctx.fillText(al+' / '+flowers.length,VW-165,50);
   ctx.fillStyle='rgba(100,60,20,.38)';ctx.font='11px Georgia,serif';ctx.textAlign='center';
   ctx.fillText('Tap anywhere to move Debbie & shoot!',VW/2,VH-7);
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
 }
 
+// ── OVERLAY CARD ─────────────────────────────────────────────────
 function drawCard(title,tc,lines,btn){
   ctx.fillStyle='rgba(15,8,0,.62)';ctx.fillRect(0,0,VW,VH);
-  const cw=520,ch=370,cx=(VW-cw)/2,cy=(VH-ch)/2;
+  const cw=550,ch=400,cx=(VW-cw)/2,cy=(VH-ch)/2;
   ctx.fillStyle='#fffbf0';ctx.strokeStyle='#c89040';ctx.lineWidth=3;
   ctx.beginPath();rr(cx,cy,cw,ch,20);ctx.fill();ctx.stroke();
   ctx.strokeStyle='rgba(210,170,80,.45)';ctx.lineWidth=1.5;
@@ -529,11 +682,11 @@ function drawCard(title,tc,lines,btn){
     ctx.fillStyle='#f0a800';ctx.beginPath();ctx.arc(fx,fy,3,0,Math.PI*2);ctx.fill();
   });
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillStyle=tc;ctx.font='bold 44px Georgia,serif';
-  ctx.shadowColor='rgba(0,0,0,.14)';ctx.shadowBlur=7;ctx.fillText(title,VW/2,cy+68);ctx.shadowBlur=0;
-  ctx.fillStyle='#5a2808';ctx.font='19px Georgia,serif';
-  lines.forEach((l,i)=>ctx.fillText(l,VW/2,cy+128+i*38));
-  const bw=250,bh=50,bx=(VW-bw)/2,by=cy+ch-76;
+  ctx.fillStyle=tc;ctx.font='bold 42px Georgia,serif';
+  ctx.shadowColor='rgba(0,0,0,.14)';ctx.shadowBlur=7;ctx.fillText(title,VW/2,cy+64);ctx.shadowBlur=0;
+  ctx.fillStyle='#5a2808';ctx.font='18px Georgia,serif';
+  lines.forEach((l,i)=>ctx.fillText(l,VW/2,cy+124+i*40));
+  const bw=270,bh=52,bx=(VW-bw)/2,by=cy+ch-72;
   const bg=ctx.createLinearGradient(bx,by,bx,by+bh);bg.addColorStop(0,'#6ed048');bg.addColorStop(1,'#48b020');
   ctx.fillStyle=bg;ctx.strokeStyle='#2a8810';ctx.lineWidth=2;
   ctx.beginPath();rr(bx,by,bw,bh,14);ctx.fill();ctx.stroke();
@@ -541,7 +694,7 @@ function drawCard(title,tc,lines,btn){
   ctx.textAlign='left';ctx.textBaseline='alphabetic';
 }
 
-// ─── RENDER LOOP ─────────────────────────────────────────────────
+// ── RENDER LOOP ──────────────────────────────────────────────────
 function render(ts){
   const dt=Math.min((ts-lastT)/1000,.05);lastT=ts;
   if(phase==='playing') update(dt);
@@ -551,34 +704,46 @@ function render(ts){
   drawBG();
   flowers.forEach(drawFlower);
   drawBullets();
-  rabbits.forEach(drawRabbit);
+  rabbits.forEach(drawEntity);
   drawParticles();
   drawDebbie();
   drawHUD();
-  if(phase==='title') drawCard('🌸 Garden Defender 🌸','#a02808',
-    ['Rabbits are invading! Help Debbie protect her flowers!',
-     '🔫  Tap anywhere to move Debbie & shoot',
-     '🐰  Tap left or right to aim at the rabbits',
-     'Defeat '+WIN+' rabbits to save the garden!'],'🌼  Start Game!  🌼');
-  else if(phase==='win') drawCard('🎉  Garden Saved!  🎉','#1a7a10',
-    ['Debbie defeated all 30 rascally rabbits!',
-     'The flowers are safe! 🌷🌻🌺',
-     'What a shot. Absolute hero.',''],'🌸  Play Again  🌸');
-  else if(phase==='lose') drawCard('🐰  Oh no…  🐰','#aa1808',
-    ['The rabbits ate all your flowers!',
-     'You got '+kills+' of them though…',
-     'Debbie needs a quicker trigger finger!',''],'🔫  Try Again!');
+
+  if(phase==='title')
+    drawCard('🌸 Garden Defender 🌸','#a02808',
+      ['Rabbits are invading! Help Debbie protect her flowers.',
+       '🔫  Tap anywhere to move Debbie & shoot',
+       '🐰  Defeat '+WIN+' rabbits to unlock Level 2!',
+       '🌸  Don\'t let them eat your flowers!'],
+      '🌼  Start Game!  🌼');
+  else if(phase==='levelup')
+    drawCard('🦌  Level 2!  🦌','#6a1a9a',
+      ['What have you done? You\'ve killed the waaaaabits... And now the deer have arrived!',
+      '🔫  Bring It On!');
+  else if(phase==='win')
+    drawCard('🎉  Garden Saved!  🎉','#1a7a10',
+      ['Debbie defeated the rabbits AND the deer! 🦌🐰',
+       'The flowers are safe. 🌷🌺🌸',''],
+      '🌸  Play Again  🌸');
+  else if(phase==='lose')
+    drawCard('🐰  Oh no…  🐰','#aa1808',
+      ['The garden invaders ate all your flowers!',
+       'You got '+kills+' of them in Level '+level+' though…',
+       'Better luck next time!',''],
+      '🔫  Try Again!');
   ctx.restore();
   requestAnimationFrame(render);
 }
 
-// ─── INPUT ───────────────────────────────────────────────────────
+// ── INPUT ────────────────────────────────────────────────────────
 function handleInput(cx,cy){
   ensureAudio();
   const rect=canvas.getBoundingClientRect();
   const gx=(cx-rect.left)/scale;
-  if(phase!=='playing'){resetGame();phase='playing';startMusic();return;}
-  // Every tap: move to that X position AND fire
+  if(phase==='title')  { resetGame(); phase='playing'; startMusic(); return; }
+  if(phase==='levelup'){ startLevel2(); return; }
+  if(phase==='win'||phase==='lose'){ resetGame(); phase='playing'; startMusic(); return; }
+  // Playing: every tap moves AND shoots
   targetX=Math.max(42,Math.min(VW-42,gx));
   if(shootCooldown<=0){
     bullets.push({x:debbieX+27,y:DEBBIE_Y-92,trail:[]});
@@ -590,7 +755,7 @@ canvas.addEventListener('touchstart',e=>{e.preventDefault();for(const t of e.cha
 canvas.addEventListener('touchmove',e=>e.preventDefault(),{passive:false});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 
-// ─── GO ──────────────────────────────────────────────────────────
+// ── GO ───────────────────────────────────────────────────────────
 initFlowers();
 requestAnimationFrame(ts=>{lastT=ts;requestAnimationFrame(render);});
 </script>
