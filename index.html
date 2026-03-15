@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>🐰 Bunny's Way Home</title>
+  <title>🐰 Albert's Way Home</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;700;800&display=swap" rel="stylesheet" />
   <style>
@@ -364,13 +364,13 @@ class TitleScene extends Phaser.Scene {
     card.lineStyle(3,0xd4a030,0.8);
     card.strokeRoundedRect(W/2-230,50,460,150,22);
 
-    this.add.text(W/2,108,'🐰 Bunny\'s Way Home',{
+    this.add.text(W/2,108,'🐰 Albert\'s Way Home',{
       fontFamily:"'Baloo 2',sans-serif", fontSize:'40px', fontStyle:'bold',
       color:'#7a3a00', stroke:'#ffe099', strokeThickness:5,
       shadow:{blur:6,color:'#b06020',fill:true}
     }).setOrigin(0.5);
 
-    this.add.text(W/2,158,'A charming tale of one very lost bunny',{
+    this.add.text(W/2,158,'Help Albert the Rabbit find his way home',{
       fontFamily:"'Baloo 2',sans-serif", fontSize:'19px',
       color:'#8a5530', stroke:'#fff0c0', strokeThickness:3
     }).setOrigin(0.5);
@@ -642,7 +642,7 @@ class GameScene extends Phaser.Scene {
         const t1=this.add.text(W/2,py+65,'You\'re Home! 🏡',
           {...tStyle,fontSize:'44px',fontStyle:'bold',color:'#7a3a00',stroke:'#ffe099',strokeThickness:5})
           .setOrigin(0.5).setDepth(51).setAlpha(0);
-        const t2=this.add.text(W/2,py+118,'Well done, little bunny! 🐰',
+        const t2=this.add.text(W/2,py+118,'Good job! 🐰',
           {...tStyle,fontSize:'22px',color:'#4a7a18',stroke:'#eeffcc',strokeThickness:3})
           .setOrigin(0.5).setDepth(51).setAlpha(0);
         const allCarrots=this.carrotsGot===this.totalCarrots;
